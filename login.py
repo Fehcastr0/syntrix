@@ -48,15 +48,16 @@ def try_connect(email: str, password: str):
     try:
         try:
             from iqbroker.stable_api import IQ_Option
-        except ImportError:
-            from iqoptionapi.stable_api import IQ_Option
-    except ImportError:
+        except (ImportError, Exception):
+            try:
+                from iqoptionapi.stable_api import IQ_Option
+            except (ImportError, Exception) as e2:
+                return False, {
+                    "error": f"Erro ao importar API: {e2}\n\nInstale com:\npip install git+https://github.com/zagmi/iqbroker.git"
+                }
+    except Exception as e:
         return False, {
-            "error": (
-                "IQ Option API nao instalada.\n\n"
-                "Instale com:\n"
-                "pip install git+https://github.com/zagmi/iqbroker.git"
-            )
+            "error": f"Erro ao importar API: {e}\n\nInstale com:\npip install git+https://github.com/zagmi/iqbroker.git"
         }
 
     try:
