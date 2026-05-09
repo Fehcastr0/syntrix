@@ -20,6 +20,7 @@ class TestRiskEngine(unittest.TestCase):
             cooldown_after_loss_sec=0.1,
             cooldown_after_trade_sec=0.1,
             min_payout_threshold=0.70,
+            session_end_hour_utc=23,
             enable_safe_mode=True,
             safe_mode_after_losses=3,
         )

@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import signal
 import sys
 import time
 import uuid
+from pathlib import Path
 from typing import Optional
 
 from analytics.trade_analytics import TradeAnalytics, TradeRecord
@@ -40,6 +42,20 @@ from strategies.trend_pullback import TrendPullbackStrategy
 from watchdog.watchdog import Watchdog
 
 logger = logging.getLogger("syntrix")
+
+
+def load_env(env_path: str = ".env") -> None:
+    """Load environment variables from .env file."""
+    path = Path(env_path)
+    if not path.exists():
+        return
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            os.environ.setdefault(key.strip(), value.strip())
 
 
 def setup_logging(level: str = "INFO") -> None:
@@ -76,8 +92,12 @@ class Syntrix:
             session_id=self._session_id,
         )
 
-        # Broker
-        self._broker = IQOptionAdapter(practice=True)
+        # Broker — reads credentials from .env file or environment variables
+        self._broker = IQOptionAdapter(
+            email=os.environ.get("IQ_EMAIL", ""),
+            password=os.environ.get("IQ_PASSWORD", ""),
+            practice=os.environ.get("IQ_PRACTICE", "true").lower() == "true",
+        )
 
         # Context
         self._session_filter = SessionFilter()
@@ -468,6 +488,7 @@ def main() -> None:
     parser.add_argument("--interval", type=float, default=60.0, help="Scan interval in seconds")
     args = parser.parse_args()
 
+    load_env()
     syntrix = Syntrix(config_path=args.config, profile=args.profile)
 
     def signal_handler(sig, frame):
