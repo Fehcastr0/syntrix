@@ -1,0 +1,3 @@
+pyyaml>=6.0
+# Optional: uncomment to use IQ Option broker
+# iqoptionapi>=7.0
