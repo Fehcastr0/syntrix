@@ -111,13 +111,25 @@ class ConfigLoader:
         )
 
     def get_trade_amount(self, profile_name: Optional[str] = None) -> float:
-        """Get trade amount for a profile."""
+        """Get trade amount. Env var IQ_AMOUNT overrides profile config."""
+        env_amount = os.environ.get("IQ_AMOUNT")
+        if env_amount:
+            try:
+                return float(env_amount)
+            except ValueError:
+                pass
         name = profile_name or self.get_default_profile_name()
         profile = self.get_profile(name)
         return profile.get("trade", {}).get("amount", 5.0)
 
     def get_trade_duration(self, profile_name: Optional[str] = None) -> int:
-        """Get trade duration (seconds) for a profile."""
+        """Get trade duration (seconds). Env var IQ_DURATION overrides profile config."""
+        env_duration = os.environ.get("IQ_DURATION")
+        if env_duration:
+            try:
+                return int(env_duration)
+            except ValueError:
+                pass
         name = profile_name or self.get_default_profile_name()
         profile = self.get_profile(name)
         return profile.get("trade", {}).get("duration", 60)

@@ -62,12 +62,15 @@ def load_env() -> dict:
     return env
 
 
-def save_env(email: str, password: str, practice: bool) -> None:
-    """Save credentials to .env file."""
+def save_env(email: str, password: str, practice: bool,
+             amount: float = 2.0, duration: int = 60) -> None:
+    """Save credentials and trade settings to .env file."""
     with open(ENV_FILE, "w", encoding="utf-8") as f:
         f.write(f"IQ_EMAIL={email}\n")
         f.write(f"IQ_PASSWORD={password}\n")
         f.write(f"IQ_PRACTICE={'true' if practice else 'false'}\n")
+        f.write(f"IQ_AMOUNT={amount}\n")
+        f.write(f"IQ_DURATION={duration}\n")
 
 
 def try_connect(email: str, password: str):
@@ -114,7 +117,7 @@ class LoginApp:
     def __init__(self) -> None:
         self.root = tk.Tk()
         self.root.title("Syntrix — Login IQ Option")
-        self.root.geometry("450x520")
+        self.root.geometry("450x620")
         self.root.resizable(False, False)
         self.root.configure(bg="#1a1a2e")
 
@@ -176,13 +179,33 @@ class LoginApp:
 
         # Account type
         type_frame = ttk.Frame(main)
-        type_frame.pack(fill="x", pady=(0, 15))
+        type_frame.pack(fill="x", pady=(0, 10))
         ttk.Label(type_frame, text="Conta para operar:", style="Field.TLabel").pack(side="left")
         self.account_var = tk.StringVar(value="demo")
         ttk.Radiobutton(type_frame, text="Demo", variable=self.account_var,
                          value="demo").pack(side="left", padx=(10, 5))
         ttk.Radiobutton(type_frame, text="Real", variable=self.account_var,
                          value="real").pack(side="left")
+
+        # Trade settings
+        trade_frame = ttk.Frame(main)
+        trade_frame.pack(fill="x", pady=(0, 15))
+
+        # Amount
+        amount_col = ttk.Frame(trade_frame)
+        amount_col.pack(side="left", expand=True, fill="x", padx=(0, 5))
+        ttk.Label(amount_col, text="Valor da entrada ($):", style="Field.TLabel").pack(anchor="w")
+        self.amount_var = tk.StringVar(value="2.00")
+        ttk.Entry(amount_col, textvariable=self.amount_var, width=10,
+                  font=("Segoe UI", 10)).pack(fill="x", pady=(2, 0))
+
+        # Duration
+        duration_col = ttk.Frame(trade_frame)
+        duration_col.pack(side="left", expand=True, fill="x", padx=(5, 0))
+        ttk.Label(duration_col, text="Duracao (segundos):", style="Field.TLabel").pack(anchor="w")
+        self.duration_var = tk.StringVar(value="60")
+        ttk.Entry(duration_col, textvariable=self.duration_var, width=10,
+                  font=("Segoe UI", 10)).pack(fill="x", pady=(2, 0))
 
         # Buttons
         btn_frame = ttk.Frame(main)
@@ -242,6 +265,10 @@ class LoginApp:
             self.pass_var.set(env["IQ_PASSWORD"])
         if env.get("IQ_PRACTICE", "true").lower() == "false":
             self.account_var.set("real")
+        if "IQ_AMOUNT" in env:
+            self.amount_var.set(env["IQ_AMOUNT"])
+        if "IQ_DURATION" in env:
+            self.duration_var.set(env["IQ_DURATION"])
         if env.get("IQ_EMAIL"):
             self.status_var.set("Credenciais carregadas do .env")
 
@@ -291,7 +318,7 @@ class LoginApp:
             messagebox.showerror("Syntrix", data.get("error", "Erro desconhecido"))
 
     def _on_save(self) -> None:
-        """Save credentials to .env."""
+        """Save credentials and trade settings to .env."""
         email = self.email_var.get().strip()
         password = self.pass_var.get().strip()
         practice = self.account_var.get() == "demo"
@@ -300,8 +327,17 @@ class LoginApp:
             self.status_var.set("Preencha email e senha!")
             return
 
-        save_env(email, password, practice)
-        self.status_var.set("Credenciais salvas em .env")
+        try:
+            amount = float(self.amount_var.get().strip())
+        except ValueError:
+            amount = 2.0
+        try:
+            duration = int(self.duration_var.get().strip())
+        except ValueError:
+            duration = 60
+
+        save_env(email, password, practice, amount, duration)
+        self.status_var.set("Credenciais e configuracoes salvas em .env")
 
     def _on_run(self) -> None:
         """Launch Syntrix main system."""
