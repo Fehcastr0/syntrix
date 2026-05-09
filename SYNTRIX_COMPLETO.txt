@@ -1,0 +1,615 @@
+================================================================
+  SYNTRIX — Sistema Operacional Quantitativo Modular
+  Orientado a Eventos para Trading
+================================================================
+  Versao: 1.4.0
+  Ultima atualizacao: 2026-05-09 21:00 UTC
+  Repositorio: https://github.com/Fehcastr0/syntrix
+  PR: https://github.com/Fehcastr0/syntrix/pull/1
+================================================================
+
+
+================================================================
+  1. O QUE E O SYNTRIX
+================================================================
+
+O Syntrix NAO e um bot de trading simples. E um sistema operacional
+quantitativo modular orientado a eventos, com foco em:
+
+- Contexto: so opera quando o contexto e favoravel
+- Filtragem probabilistica: bloqueia operacoes de baixa qualidade
+- Gestao de risco: stops, drawdown, cooldown, safe mode
+- Observabilidade: logs estruturados, metricas, tracing
+- Replay: reproducao completa de sessoes via event sourcing
+- Analytics: metricas detalhadas de performance
+- Arquitetura desacoplada: modulos independentes via EventBus
+
+Filosofia central:
+"Selecionar melhor e mais importante do que prever melhor."
+
+O sistema opera pouco, evita contexto ruim, prioriza sobrevivencia
+estatistica e registra tudo para auditoria.
+
+
+================================================================
+  2. ARQUIVOS E COMO RODAR
+================================================================
+
+ARQUIVOS PRINCIPAIS:
+  - start.py        Launcher principal (menu com todos os botoes)
+  - login.py        Tela de login IQ Option (email, senha, saldos)
+  - main.py         Sistema Syntrix (motor de trading)
+  - instalar.bat    Instalacao automatica de dependencias (Windows)
+  - iq_api.py       Loader centralizado da API IQ Option
+
+COMO INSTALAR (primeira vez):
+  1. Extrair os arquivos na pasta desejada
+  2. Dar dois cliques no "instalar.bat"
+     OU rodar no terminal:
+     pip install pyyaml fake_useragent
+     pip install git+https://github.com/zagmi/iqbroker.git
+
+COMO RODAR:
+  python start.py              Abre o launcher com menu completo
+  python login.py              Abre tela de login IQ Option
+  python main.py               Roda com interface Tkinter
+  python main.py --headless    Roda sem interface (so terminal)
+  python main.py --interval 30 Muda intervalo de scan (padrao 60s)
+  python main.py --profile moderado   Usa perfil moderado
+
+TESTES:
+  python -m pytest tests/ -v   Roda os 72 testes unitarios
+
+
+================================================================
+  3. ESTRUTURA DE MODULOS (51 arquivos, ~8.170 linhas)
+================================================================
+
+projeto/
+|
+|-- core/                      NUCLEO DO SISTEMA
+|   |-- events.py              EventBus assincrono (PriorityQueue, 4 workers)
+|   |                          30+ tipos de evento, dead letter queue,
+|   |                          correlation_id, causation_id, metricas
+|   |-- states.py              Maquina de estados (8 estados operacionais)
+|
+|-- brokers/                   ABSTRACOES DE BROKER
+|   |-- base.py                Interface abstrata (connect, execute_trade, etc)
+|   |-- iqoption/
+|       |-- adapter.py         Adaptador IQ Option (iqbroker/iqoptionapi)
+|                              Reconnect, heartbeat, health check, latencia
+|
+|-- context/                   MOTOR DE CONTEXTO
+|   |-- context_gate.py        Gate central — 11 verificacoes, padrao BLOCK
+|   |-- market_regime.py       Detector de regime (trend, range, volatility)
+|   |-- session_filter.py      Filtro de sessao (London, NY, overlap, OTC)
+|   |-- news_filter.py         Filtro de noticias (bloqueio proximo de evento)
+|   |-- spike_detector.py      Detector de spikes (candles anomalos)
+|
+|-- risk/                      MOTOR DE RISCO
+|   |-- risk_engine.py         Stop gain/loss, drawdown, cooldown, safe mode,
+|                              trades/hora, pausa apos losses, risk lock
+|
+|-- execution/                 MOTOR DE EXECUCAO
+|   |-- engine.py              Timing, jitter controlado, rate limiting,
+|                              retry seguro, controle de latencia
+|
+|-- strategies/                ESTRATEGIAS DE TRADING
+|   |-- base.py                Interface base para estrategias
+|   |-- trend_pullback.py      Estrategia de pullback em tendencia
+|   |-- range_reversal.py      Estrategia de reversao em range
+|   |-- breakout.py            Estrategia de rompimento
+|   |-- momentum.py            Estrategia de momentum
+|   |-- scoring.py             Motor de scoring contextual
+|
+|-- indicators/                INDICADORES TECNICOS (puro Python)
+|   |-- technical.py           SMA, EMA, RSI, Bollinger Bands, ATR,
+|                              MACD, Stochastic, ADX
+|
+|-- analytics/                 ANALYTICS E METRICAS
+|   |-- trade_analytics.py     Winrate, Sharpe, drawdown, profit factor,
+|                              edge, performance por regime/sessao/ativo
+|
+|-- replay/                    REPLAY ENGINE
+|   |-- engine.py              Replay por sessao, por trade, reconstrucao
+|                              temporal, timeline, tracing causal
+|
+|-- event_store/               EVENT SOURCING
+|   |-- models.py              Modelos de dados
+|   |-- sqlite_store.py        Persistencia SQLite (WAL mode)
+|
+|-- trade_logging/             LOGGING DE TRADES
+|   |-- trade_logger.py        Snapshot completo de cada trade (40+ campos)
+|
+|-- watchdog/                  MONITORAMENTO
+|   |-- watchdog.py            Threads travadas, conexao, queue overflow,
+|                              handlers lentos, freeze UI, websocket
+|
+|-- ui/                        INTERFACE
+|   |-- app.py                 Dashboard Tkinter leve (max 2s atualizacao)
+|
+|-- config/                    CONFIGURACAO
+|   |-- profiles.yaml          Perfis de risco (leve, moderado, agressivo, extremo)
+|   |-- loader.py              Loader de configuracao YAML
+|
+|-- tests/                     TESTES UNITARIOS (72 testes)
+|   |-- test_event_bus.py      Testes do EventBus
+|   |-- test_state_machine.py  Testes da maquina de estados
+|   |-- test_risk_engine.py    Testes do motor de risco
+|   |-- test_context_gate.py   Testes do context gate
+|   |-- test_broker.py         Testes do broker abstrato
+|   |-- test_replay.py         Testes do replay engine
+|
+|-- scripts/                   SCRIPTS UTILITARIOS
+|   |-- analytics_report.py    Gera relatorio de analytics
+|   |-- replay_session.py      Replay de sessao anterior
+|   |-- run.py                 Script auxiliar de execucao
+|
+|-- data/                      DADOS (gerado automaticamente)
+|   |-- trade_logs/            Logs de trades (JSONL diario)
+|   |-- syntrix.db             Banco de eventos SQLite
+|
+|-- docs/                      DOCUMENTACAO
+|   |-- ARCHITECTURE.md        Documentacao da arquitetura
+|
+|-- login.py                   App de login IQ Option
+|-- start.py                   Launcher principal
+|-- main.py                    Entry point do sistema
+|-- iq_api.py                  Loader centralizado da API
+|-- instalar.bat               Instalador de dependencias (Windows)
+|-- .env                       Credenciais (NAO vai pro git)
+|-- .gitignore                 Arquivos ignorados pelo git
+|-- requirements.txt           Dependencias Python
+|-- pyproject.toml             Configuracao do projeto
+
+
+================================================================
+  4. MAQUINA DE ESTADOS (8 estados)
+================================================================
+
+  IDLE            Sistema ocioso, aguardando inicio
+  SCANNING        Escaneando ativos configurados
+  WAITING_CONTEXT Avaliando contexto de um ativo
+  READY           Contexto aprovado, avaliando estrategias
+  EXECUTING       Executando trade no broker
+  COOLDOWN        Pausa apos trade executado
+  RISK_LOCK       Bloqueado por limites de risco
+  SAFE_MODE       Modo seguro ativado apos perdas consecutivas
+
+Fluxo normal:
+  IDLE -> SCANNING -> WAITING_CONTEXT -> READY -> EXECUTING -> COOLDOWN -> SCANNING
+
+
+================================================================
+  5. CONTEXT GATE — 11 VERIFICACOES
+================================================================
+
+O ContextGate e o filtro central. Padrao: BLOCK.
+So libera quando TODAS as verificacoes passam.
+
+  1. Payout minimo         Payout do ativo >= threshold (65% no leve)
+  2. Sessao valida          Horario dentro de sessao ativa
+                            OTC: sempre permitido (24h)
+                            Regular: London (07-16), NY (13-22), Overlap (13-16)
+  3. Filtro de noticias     Bloqueia proximo de noticias economicas
+  4. Regime de mercado      Bloqueia regimes instáveis
+  5. Detector de spikes     Bloqueia candles anomalos
+  6. Latencia do broker     Bloqueia se latencia > threshold
+  7. Cooldown               Respeita tempo minimo entre trades
+  8. Rate limit             Max trades por hora
+  9. Drawdown               Bloqueia se drawdown > threshold
+ 10. Saude do broker        Verifica conexao ativa
+ 11. Checks customizados    Extensivel para novas verificacoes
+
+Retornos possiveis:
+  ALLOW   — todas as verificacoes passaram
+  CAUTION — avisos mas sem bloqueio duro
+  BLOCK   — uma ou mais verificacoes falharam
+
+
+================================================================
+  6. GESTAO DE RISCO
+================================================================
+
+Perfil LEVE (padrao):
+  Stop Gain:              $30.00
+  Stop Loss:              -$15.00
+  Drawdown maximo:        5%
+  Max trades por hora:    5
+  Max losses consecutivos: 2
+  Cooldown apos loss:     60 segundos
+  Cooldown apos trade:    30 segundos
+  Payout minimo:          65%
+  Fim de sessao (UTC):    23:00
+  Safe mode:              Ativa apos 3 losses
+
+Perfil MODERADO:
+  Stop Gain:              $50.00
+  Stop Loss:              -$30.00
+  Drawdown maximo:        10%
+  Max trades por hora:    10
+  Max losses consecutivos: 3
+  Cooldown apos loss:     180 segundos
+  Cooldown apos trade:    120 segundos
+  Payout minimo:          70%
+  Fim de sessao (UTC):    21:00
+  Safe mode:              Ativa apos 5 losses
+
+Perfil AGRESSIVO (inativo):
+  Stop Gain:              $100.00
+  Stop Loss:              -$50.00
+  Drawdown maximo:        15%
+  Max trades por hora:    15
+  Payout minimo:          65%
+
+Perfil EXTREMO (inativo/experimental):
+  Stop Gain:              $200.00
+  Stop Loss:              -$100.00
+  Drawdown maximo:        25%
+  Max trades por hora:    20
+  Payout minimo:          60%
+
+
+================================================================
+  7. ESTRATEGIAS DE TRADING
+================================================================
+
+  1. TREND PULLBACK (trend_pullback.py)
+     - Opera a favor da tendencia durante pullbacks
+     - Regime compativel: trend
+     - Usa EMA, RSI, ATR para confirmar
+
+  2. RANGE REVERSAL (range_reversal.py)
+     - Opera reversao em mercado lateral
+     - Regime compativel: range
+     - Usa Bollinger Bands, RSI, Stochastic
+
+  3. BREAKOUT (breakout.py)
+     - Opera rompimentos de niveis importantes
+     - Regime compativel: range, low_volatility
+     - Usa ATR, volume, suporte/resistencia
+
+  4. MOMENTUM (momentum.py)
+     - Opera movimentos fortes de momentum
+     - Regime compativel: trend, high_volatility
+     - Usa MACD, ADX, RSI
+
+Cada estrategia:
+  - Retorna score (0.0 a 1.0)
+  - Retorna confianca
+  - Retorna direcao (CALL/PUT)
+  - NUNCA executa ordem diretamente
+  - E avaliada pelo ScoringEngine antes de executar
+
+
+================================================================
+  8. INDICADORES TECNICOS (8 indicadores)
+================================================================
+
+  1. SMA   — Simple Moving Average
+  2. EMA   — Exponential Moving Average
+  3. RSI   — Relative Strength Index
+  4. BB    — Bollinger Bands (upper, middle, lower)
+  5. ATR   — Average True Range
+  6. MACD  — Moving Average Convergence Divergence
+  7. STOCH — Stochastic Oscillator (%K, %D)
+  8. ADX   — Average Directional Index
+
+Todos implementados em Python puro (sem NumPy, sem pandas).
+
+
+================================================================
+  9. HORARIOS DE OPERACAO
+================================================================
+
+SESSOES DE MERCADO (horarios UTC):
+  Tokyo:     00:00 - 09:00 UTC
+  London:    07:00 - 16:00 UTC
+  New York:  13:00 - 22:00 UTC
+  Overlap:   13:00 - 16:00 UTC (London + NY)
+
+ZONA MORTA (bloqueada):
+  22:00 - 06:00 UTC (baixa liquidez)
+
+ATIVOS OTC:
+  Funcionam 24 horas — NAO sao bloqueados por sessao.
+  Ativos configurados: EURUSD-OTC, GBPUSD-OTC, EURJPY-OTC
+
+HORARIO DE ENCERRAMENTO POR PERFIL:
+  Leve:      23:00 UTC
+  Moderado:  21:00 UTC
+  Agressivo: 22:00 UTC
+  Extremo:   23:00 UTC
+
+CONVERSAO PARA HORARIO DE BRASILIA (UTC-3):
+  Tokyo:     21:00 - 06:00 BRT
+  London:    04:00 - 13:00 BRT
+  New York:  10:00 - 19:00 BRT
+  Overlap:   10:00 - 13:00 BRT
+  Zona morta: 19:00 - 03:00 BRT
+
+
+================================================================
+  10. CONFIGURACOES DO .ENV
+================================================================
+
+O arquivo .env guarda as configuracoes pessoais:
+
+  IQ_EMAIL=seu@email.com       Email da IQ Option
+  IQ_PASSWORD=suasenha         Senha da IQ Option
+  IQ_PRACTICE=true             true=demo, false=real
+  IQ_AMOUNT=2.00               Valor da entrada ($)
+  IQ_DURATION=60               Duracao da operacao (segundos)
+
+Essas configuracoes sao definidas pelo app de login (login.py).
+O .env NAO e enviado para o GitHub (esta no .gitignore).
+
+
+================================================================
+  11. APPS E INTERFACES
+================================================================
+
+LOGIN APP (login.py):
+  - Campo de email e senha
+  - Selecao de conta: Demo ou Real
+  - Campo de valor da entrada ($)
+  - Campo de duracao (segundos)
+  - Botao "Conectar & Testar" — testa conexao e mostra saldos
+  - Mostra saldo DEMO e saldo REAL
+  - Salva tudo no .env automaticamente
+  - Botao "Iniciar Syntrix" — abre o sistema principal
+  - Auto-instala dependencias se necessario
+
+LAUNCHER (start.py):
+  - Botao "Login IQ Option" — abre login.py
+  - Botao "Iniciar Syntrix" — conecta e opera
+  - Botao "Dry-Run" — roda sem broker (simulacao)
+  - Botao "Parar Syntrix" — para o sistema
+  - Botao "Analytics" — gera relatorio de performance
+  - Botao "Testes" — roda os 72 testes unitarios
+  - Botao "Config" — abre profiles.yaml no editor
+  - Console — mostra logs em tempo real
+  - Mostra conta configurada e modo (demo/real)
+  - Auto-instala dependencias se necessario
+
+DASHBOARD (ui/app.py — via python main.py):
+  - Estado atual do sistema
+  - Perfil e modo ativo
+  - PnL (lucro/prejuizo)
+  - Numero de trades
+  - Drawdown atual
+  - Ultimo trade executado
+  - Ultimas 50 linhas do log
+  - Atualizacao maxima: 2 segundos
+  - NAO bloqueia o core
+
+
+================================================================
+  12. EVENT SOURCING E REPLAY
+================================================================
+
+Todos os eventos sao persistidos no SQLite (data/syntrix.db).
+
+Eventos salvos:
+  - Transicoes de estado
+  - Avaliacoes de contexto
+  - Sinais de estrategia
+  - Execucoes de trade
+  - Resultados de trade
+  - Bloqueios de risco
+  - Erros e warnings
+
+Replay:
+  - Replay completo de sessao
+  - Replay por trade individual
+  - Reconstrucao temporal
+  - Timeline de eventos
+  - Tracing causal (correlation_id)
+
+Comando:
+  python scripts/replay_session.py
+
+
+================================================================
+  13. ANALYTICS
+================================================================
+
+Metricas calculadas:
+  - Winrate (taxa de acerto)
+  - Sharpe Ratio
+  - Drawdown maximo
+  - Profit Factor
+  - Edge esperado vs real
+  - Performance por regime de mercado
+  - Performance por sessao
+  - Performance por ativo
+  - Performance por perfil
+  - Degradacao estatistica
+  - Comportamento apos losses
+
+Comando:
+  python scripts/analytics_report.py
+
+Logs de trades:
+  data/trade_logs/trades_YYYY-MM-DD.jsonl
+  Cada trade tem 40+ campos incluindo:
+    ativo, payout, score, regime, sessao, perfil,
+    estrategia, modo, contexto, estado, timestamps,
+    latencia, resultado, motivo de bloqueio
+
+
+================================================================
+  14. WATCHDOG (monitoramento)
+================================================================
+
+O Watchdog monitora continuamente:
+  - Threads travadas
+  - Conexao perdida com broker
+  - Atraso na fila de eventos
+  - Queue overflow
+  - Handlers lentos (>1s de processamento)
+  - Freeze da interface
+  - Status do websocket
+  - Intervalo de checagem: 10 segundos
+
+
+================================================================
+  15. OBSERVABILIDADE
+================================================================
+
+  - Metricas internas do EventBus (throughput, queue depth, drops)
+  - Tracing via correlation_id (rastrear cadeia de eventos)
+  - Latency tracking (broker, execucao, processamento)
+  - Structured logs com timestamp, nivel, modulo
+  - Debug mode (aumente level para DEBUG no profiles.yaml)
+  - Health dashboard textual (via watchdog)
+
+
+================================================================
+  16. TESTES UNITARIOS (72 testes)
+================================================================
+
+  test_event_bus.py       EventBus, prioridades, dead letter, metricas
+  test_state_machine.py   Transicoes, historico, validacao
+  test_risk_engine.py     Stops, drawdown, cooldown, safe mode
+  test_context_gate.py    Verificacoes de contexto, bloqueios
+  test_broker.py          Abstracoes de broker, adaptador
+  test_replay.py          Replay engine, reconstrucao
+
+Rodar: python -m pytest tests/ -v
+
+
+================================================================
+  17. DEPENDENCIAS
+================================================================
+
+  Python 3.10+ (testado com 3.13)
+  pyyaml >= 6.0          Parsing de configuracao YAML
+  fake_useragent >= 2.0  Necessario para iqbroker
+  iqbroker == 7.1.2      API IQ Option (fork zagmi)
+  tkinter                Interface grafica (incluso no Python)
+  sqlite3                Banco de dados (incluso no Python)
+
+Instalacao automatica: instalar.bat ou via auto-install nos apps.
+
+
+================================================================
+  18. SEGURANCA
+================================================================
+
+  - Credenciais salvas APENAS no .env (local)
+  - .env esta no .gitignore (NAO vai pro GitHub)
+  - Nenhuma senha hardcoded no codigo
+  - Login app valida conexao antes de salvar
+  - Sistema inicia em modo demo por padrao
+  - Todas as operacoes sao registradas para auditoria
+
+
+================================================================
+  19. HISTORICO DE ATUALIZACOES
+================================================================
+
+[2026-05-09 18:00 UTC] v1.0.0 — LANCAMENTO INICIAL
+  - Sistema completo: 61 arquivos, ~7.750 linhas
+  - 18 modulos implementados sem placeholders
+  - 72 testes unitarios passando
+  - 4 estrategias: trend_pullback, range_reversal, breakout, momentum
+  - 8 indicadores tecnicos: SMA, EMA, RSI, BB, ATR, MACD, Stoch, ADX
+  - EventBus assincrono com PriorityQueue e 4 workers
+  - Event sourcing completo com SQLite
+  - Maquina de estados com 8 estados operacionais
+  - ContextGate com 11 verificacoes (padrao BLOCK)
+  - Risk engine com stops, drawdown, cooldown, safe mode
+  - Replay engine com tracing causal
+  - Analytics com winrate, sharpe, profit factor
+  - Dashboard Tkinter leve
+  - Watchdog com monitoramento de threads e conexao
+  - 4 perfis: leve, moderado, agressivo, extremo
+  - PR criado: https://github.com/Fehcastr0/syntrix/pull/1
+
+[2026-05-09 18:30 UTC] v1.1.0 — CREDENCIAIS E BROKER
+  - Adicionado loader de .env para credenciais
+  - Broker adapter atualizado para ler do .env
+  - .env adicionado ao .gitignore
+  - Modo padrao alterado para demo no profiles.yaml
+  - Fix: EventBusMetrics usando RLock (evita deadlock)
+  - Fix: Renomeado logging/ -> trade_logging/ (conflito com stdlib)
+
+[2026-05-09 19:00 UTC] v1.1.1 — COMPATIBILIDADE IQBROKER
+  - Suporte ao pacote iqbroker (zagmi fork) alem de iqoptionapi
+  - Adapter tenta iqbroker.stable_api primeiro, fallback iqoptionapi
+  - Corrigido: iqoptionapi v0.5 incompativel com Python 3.13
+
+[2026-05-09 19:30 UTC] v1.2.0 — LOGIN APP
+  - Novo: login.py — tela de login IQ Option com Tkinter
+  - Campos de email e senha (carrega do .env se existir)
+  - Selecao de conta: Demo ou Real
+  - Botao "Conectar & Testar" — testa conexao
+  - Mostra saldos Demo e Real da conta
+  - Salva credenciais no .env automaticamente
+  - Botao "Iniciar Syntrix" — abre o sistema principal
+
+[2026-05-09 19:45 UTC] v1.2.1 — LAUNCHER APP
+  - Novo: start.py — launcher principal com menu completo
+  - Botoes: Login, Iniciar, Dry-Run, Parar, Analytics, Testes, Config
+  - Console integrado com logs em tempo real
+  - Mostra conta configurada e modo ativo
+
+[2026-05-09 20:00 UTC] v1.2.2 — FIX IMPORT
+  - Fix: catch all exceptions durante import da API (nao so ImportError)
+  - Mensagem de erro agora mostra o problema real
+
+[2026-05-09 20:10 UTC] v1.2.3 — FAKE_USERAGENT
+  - Fix: adicionado fake_useragent como dependencia (requerido por iqbroker)
+  - Atualizado requirements.txt
+
+[2026-05-09 20:15 UTC] v1.2.4 — FIX DISCONNECT
+  - Fix: IQ_Option nao tem metodo disconnect() no iqbroker
+  - Adicionado try/except ao redor de disconnect()
+
+[2026-05-09 20:30 UTC] v1.3.0 — OTIMIZACOES DE CONTEXTO
+  - OTC assets agora ignoram filtro de sessao (funcionam 24h)
+  - Logs detalhados: mostra exatamente o que bloqueia cada ativo
+  - Thresholds relaxados no perfil leve para demo:
+    - Payout minimo: 75% -> 65%
+    - Cooldown apos trade: 180s -> 30s
+    - Cooldown apos loss: 300s -> 60s
+    - Score minimo: 65% -> 50%
+    - Regimes bloqueados: unstable + high_volatility -> apenas unstable
+  - Session end: 20h -> 23h UTC
+
+[2026-05-09 20:45 UTC] v1.3.1 — INSTALAR.BAT
+  - Novo: instalar.bat — instalacao de dependencias com dois cliques
+  - Instala pyyaml, fake_useragent e iqbroker automaticamente
+
+[2026-05-09 20:55 UTC] v1.3.2 — AUTO-INSTALL
+  - Novo: iq_api.py — loader centralizado da API IQ Option
+  - Auto-instala dependencias faltantes ao rodar login.py ou start.py
+  - Nao precisa mais rodar pip install manualmente
+  - Import centralizado: iqbroker ou iqoptionapi detectado automaticamente
+
+[2026-05-09 21:00 UTC] v1.4.0 — VALOR E DURACAO
+  - Novo: campos "Valor da entrada ($)" e "Duracao (segundos)" no login.py
+  - Valores salvos no .env (IQ_AMOUNT, IQ_DURATION)
+  - config/loader.py le IQ_AMOUNT e IQ_DURATION do .env
+  - Valores do .env tem prioridade sobre profiles.yaml
+
+
+================================================================
+  20. PROXIMAS FUNCIONALIDADES PLANEJADAS
+================================================================
+
+  - [ ] Mais ativos (GBPUSD-OTC, EURJPY-OTC, USDJPY-OTC, etc)
+  - [ ] Martingale opcional (com limites de seguranca)
+  - [ ] Notificacoes via Telegram
+  - [ ] Historico visual de trades
+  - [ ] Backtesting com dados historicos
+  - [ ] Suporte a outros brokers (Quotex, Pocket Option)
+  - [ ] Dashboard web leve
+  - [ ] Auto-ajuste de perfil baseado em performance
+
+
+================================================================
+  FIM DO DOCUMENTO
+  Atualizado em: 2026-05-09 21:00 UTC
+================================================================
