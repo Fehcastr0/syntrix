@@ -17,10 +17,10 @@ profiles:
       max_drawdown_pct: 5.0
       max_trades_per_hour: 5
       max_consecutive_losses: 2
-      cooldown_after_loss_sec: 300
-      cooldown_after_trade_sec: 180
-      min_payout_threshold: 0.75
-      session_end_hour_utc: 20
+      cooldown_after_loss_sec: 60
+      cooldown_after_trade_sec: 30
+      min_payout_threshold: 0.65
+      session_end_hour_utc: 23
       enable_safe_mode: true
       safe_mode_after_losses: 3
     execution:
@@ -29,13 +29,13 @@ profiles:
       max_retries: 1
       max_latency_ms: 400
     context:
-      min_payout: 0.75
-      max_trades_per_hour: 5
+      min_payout: 0.65
+      max_trades_per_hour: 10
       max_drawdown_pct: 5.0
-      cooldown_seconds: 180
-      blocked_regimes: ["unstable", "high_volatility"]
+      cooldown_seconds: 30
+      blocked_regimes: ["unstable"]
     scoring:
-      min_final_score: 0.65
+      min_final_score: 0.50
     trade:
       amount: 2.0
       duration: 60

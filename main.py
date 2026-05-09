@@ -232,13 +232,16 @@ class Syntrix:
             candles = []
             payout = 0.0
             if self._mode != "dry-run" and self._broker.is_connected:
+                logger.info("[%s] Getting candles and payout...", asset)
                 candles = self._broker.get_candles(asset, 60, 50)
                 payout = self._broker.get_payout(asset)
+                logger.info("[%s] Candles: %d, Payout: %.0f%%", asset, len(candles), payout * 100)
             else:
-                # Dry-run: skip execution
+                logger.info("[%s] Skipped — mode=%s, connected=%s", asset, self._mode, self._broker.is_connected)
                 continue
 
             if not candles:
+                logger.warning("[%s] No candles received — skipping", asset)
                 continue
 
             # Context evaluation
@@ -256,7 +259,10 @@ class Syntrix:
                 data={"asset": asset, "decision": ctx_result["decision"]},
             )
 
+            logger.info("[%s] Context: %s", asset, ctx_result["decision"])
+
             if ctx_result["blocked"]:
+                logger.info("[%s] BLOCKED: %s", asset, ", ".join(ctx_result["block_reasons"]))
                 self._event_bus.emit(
                     EventType.CONTEXT_BLOCKED,
                     data={"asset": asset, "reasons": ctx_result["block_reasons"]},

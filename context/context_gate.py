@@ -120,7 +120,7 @@ class ContextGate:
         if payout_check["blocked"]:
             block_reasons.append(payout_check["reason"])
 
-        session_check = self._check_session()
+        session_check = self._check_session(asset=asset)
         checks.append(session_check)
         if session_check["blocked"]:
             block_reasons.append(session_check["reason"])
@@ -210,7 +210,13 @@ class ContextGate:
             "threshold": self._min_payout,
         }
 
-    def _check_session(self) -> Dict[str, Any]:
+    def _check_session(self, asset: str = "") -> Dict[str, Any]:
+        if asset.endswith("-OTC"):
+            return {
+                "name": "session",
+                "blocked": False,
+                "reason": "OTC asset — always available",
+            }
         result = self._session_filter.evaluate()
         return {
             "name": "session",
