@@ -139,7 +139,7 @@ profiles:
 # Default settings
 defaults:
   profile: leve
-  mode: dry-run  # dry-run / demo / live
+  mode: demo  # dry-run / demo / live
   assets:
     - EURUSD-OTC
     - GBPUSD-OTC

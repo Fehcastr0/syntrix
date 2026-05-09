@@ -81,8 +81,12 @@ class IQOptionAdapter(BaseBroker):
                 self._record_error()
                 logger.error("IQ Option connection failed: %s", reason)
                 return False
-        except ImportError:
-            logger.warning("iqoptionapi not installed; running in dry-run mode")
+        except ImportError as ie:
+            logger.warning(
+                "iqoptionapi import failed: %s — try: pip install iqoptionapi==0.4 "
+                "or pip install git+https://github.com/nickreserved/iqoptionapi.git",
+                ie,
+            )
             self._status = BrokerStatus.ERROR
             return False
         except Exception as exc:
