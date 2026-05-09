@@ -72,12 +72,19 @@ def try_connect(email: str, password: str):
             api.change_balance("REAL")
             real_balance = api.get_balance()
 
-            api.disconnect()
+            try:
+                api.disconnect()
+            except (AttributeError, Exception):
+                pass
             return True, {
                 "demo_balance": demo_balance,
                 "real_balance": real_balance,
             }
         else:
+            try:
+                api.disconnect()
+            except (AttributeError, Exception):
+                pass
             return False, {"error": f"Falha na conexao: {reason}"}
     except Exception as exc:
         return False, {"error": f"Erro: {exc}"}
