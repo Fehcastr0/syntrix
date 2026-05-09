@@ -56,22 +56,17 @@ class IQOptionAdapter(BaseBroker):
         self._ws_alive = False
         self._errors: List[float] = []
 
-    @staticmethod
-    def _import_iq_option():
-        """Import IQ_Option from available package (iqbroker or iqoptionapi)."""
-        try:
-            from iqbroker.stable_api import IQ_Option
-            return IQ_Option
-        except ImportError:
-            pass
-        from iqoptionapi.stable_api import IQ_Option
-        return IQ_Option
-
     def connect(self) -> bool:
         """Connect to IQ Option API."""
         self._status = BrokerStatus.CONNECTING
         try:
-            IQ_Option = self._import_iq_option()
+            from iq_api import get_iq_option_class
+
+            IQ_Option, error = get_iq_option_class()
+            if IQ_Option is None:
+                logger.warning("iqbroker/iqoptionapi not available: %s", error)
+                self._status = BrokerStatus.ERROR
+                return False
 
             self._api = IQ_Option(self._email, self._password)
             check, reason = self._api.connect()
@@ -92,14 +87,6 @@ class IQOptionAdapter(BaseBroker):
                 self._record_error()
                 logger.error("IQ Option connection failed: %s", reason)
                 return False
-        except ImportError as ie:
-            logger.warning(
-                "IQ Option API not found: %s — install with: "
-                "pip install git+https://github.com/zagmi/iqbroker.git",
-                ie,
-            )
-            self._status = BrokerStatus.ERROR
-            return False
         except Exception as exc:
             self._status = BrokerStatus.ERROR
             self._record_error()

@@ -24,6 +24,34 @@ ENV_FILE = ".env"
 PROJECT_DIR = Path(__file__).parent
 
 
+def ensure_dependencies() -> None:
+    """Auto-install required dependencies if missing."""
+    deps = [("pyyaml", "pyyaml"), ("fake_useragent", "fake_useragent")]
+    for module, package in deps:
+        try:
+            __import__(module)
+        except ImportError:
+            subprocess.check_call(
+                [sys.executable, "-m", "pip", "install", package],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+    # Check iqbroker
+    try:
+        __import__("iqbroker")
+    except ImportError:
+        try:
+            __import__("iqoptionapi")
+        except ImportError:
+            subprocess.check_call(
+                [sys.executable, "-m", "pip", "install",
+                 "git+https://github.com/zagmi/iqbroker.git"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+
+
+ensure_dependencies()
+
+
 def load_env() -> dict:
     """Load .env values."""
     env = {}

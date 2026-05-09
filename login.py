@@ -11,11 +11,38 @@ Simple Tkinter GUI to:
 
 from __future__ import annotations
 
+import subprocess
+import sys
 import threading
 import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, ttk
 
+
+def ensure_dependencies() -> None:
+    """Auto-install required dependencies if missing."""
+    for module, package in [("fake_useragent", "fake_useragent")]:
+        try:
+            __import__(module)
+        except ImportError:
+            subprocess.check_call(
+                [sys.executable, "-m", "pip", "install", package],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+    try:
+        __import__("iqbroker")
+    except ImportError:
+        try:
+            __import__("iqoptionapi")
+        except ImportError:
+            subprocess.check_call(
+                [sys.executable, "-m", "pip", "install",
+                 "git+https://github.com/zagmi/iqbroker.git"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+
+
+ensure_dependencies()
 
 ENV_FILE = ".env"
 
@@ -45,20 +72,11 @@ def save_env(email: str, password: str, practice: bool) -> None:
 
 def try_connect(email: str, password: str):
     """Try to connect to IQ Option. Returns (success, data_dict)."""
-    try:
-        try:
-            from iqbroker.stable_api import IQ_Option
-        except (ImportError, Exception):
-            try:
-                from iqoptionapi.stable_api import IQ_Option
-            except (ImportError, Exception) as e2:
-                return False, {
-                    "error": f"Erro ao importar API: {e2}\n\nInstale com:\npip install git+https://github.com/zagmi/iqbroker.git"
-                }
-    except Exception as e:
-        return False, {
-            "error": f"Erro ao importar API: {e}\n\nInstale com:\npip install git+https://github.com/zagmi/iqbroker.git"
-        }
+    from iq_api import get_iq_option_class
+
+    IQ_Option, error = get_iq_option_class()
+    if IQ_Option is None:
+        return False, {"error": error}
 
     try:
         api = IQ_Option(email, password)
