@@ -1,0 +1,4 @@
+pyyaml>=6.0
+fake_useragent>=2.0
+# IQ Option broker (install one of these):
+# pip install git+https://github.com/zagmi/iqbroker.git
