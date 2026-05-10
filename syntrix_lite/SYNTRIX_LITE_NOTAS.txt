@@ -1,0 +1,375 @@
+================================================================
+  SYNTRIX LITE — Bloco de Notas / Documentacao Completa
+  Validar Edge Real com Simplicidade
+================================================================
+  Versao: 1.0.0
+  Ultima atualizacao: 2026-05-09
+  Repositorio: https://github.com/Fehcastr0/syntrix
+  PR: https://github.com/Fehcastr0/syntrix/pull/2
+================================================================
+
+
+================================================================
+  1. O QUE E O SYNTRIX LITE
+================================================================
+
+O Syntrix Lite e uma versao MINIMALISTA do Syntrix, focada em:
+
+  - OPERAR (nao apenas analisar)
+  - COLETAR DADOS REAIS
+  - VALIDAR EDGE ESTATISTICAMENTE
+  - MANTER RISCO CONTROLADO
+  - SIMPLICIDADE OPERACIONAL
+
+Filosofia:
+  "Menos complexidade. Mais execucao. Mais validacao estatistica."
+
+O Syntrix principal ficou excessivamente complexo:
+  - 50+ filtros bloqueando operacoes
+  - Modelo multiplicativo causando colapso de scores
+  - Sistema praticamente nao fazia entradas
+  - Muita inteligencia, pouca execucao
+
+O Syntrix Lite resolve isso com:
+  - 2 estrategias simples
+  - 3 indicadores objetivos
+  - Scoring aditivo (sem cascata multiplicativa)
+  - Threshold unico e direto
+  - Filtros minimos e justificados
+
+
+================================================================
+  2. ARQUITETURA
+================================================================
+
+Pipeline:
+  SCAN ASSETS -> STRATEGIES -> SCORE -> BEST SIGNAL -> RISK -> EXECUTE
+
+Modulos (6 apenas):
+  scanner/     — indicadores + scanner de ativos
+  strategies/  — trend pullback + momentum
+  risk/        — stop gain/loss, cooldown, position lock
+  execution/   — broker adapter + shadow mode
+  analytics/   — winrate, expectancy, drawdown, sharpe
+  logs/        — trade logger CSV
+
+Nenhum modulo desnecessario. Nenhum overengineering.
+
+
+================================================================
+  3. INDICADORES
+================================================================
+
+Apenas 3 indicadores permitidos:
+
+  EMA (Exponential Moving Average)
+    - EMA rapida (9 periodos) vs EMA lenta (21 periodos)
+    - Determina direcao da tendencia
+    - EMA rapida > EMA lenta = tendencia de alta
+    - EMA rapida < EMA lenta = tendencia de baixa
+
+  RSI (Relative Strength Index)
+    - Periodo: 14
+    - Mede forca/fraqueza do momento
+    - Usado para pullback (45-65 call, 35-55 put)
+    - Usado para momentum (>55 call, <45 put)
+
+  ATR (Average True Range)
+    - Periodo: 14
+    - Mede volatilidade real
+    - Filtro: ATR minimo para evitar mercado parado
+    - Volatilidade muito baixa = nao operar
+
+
+================================================================
+  4. ESTRATEGIAS
+================================================================
+
+4.1 — TREND PULLBACK
+  Entra na direcao da tendencia quando RSI recua.
+
+  CALL:
+    - EMA rapida > EMA lenta (tendencia de alta)
+    - RSI entre 40-65 (recuou mas nao vendido)
+    - ATR acima do minimo
+
+  PUT:
+    - EMA rapida < EMA lenta (tendencia de baixa)
+    - RSI entre 35-60 (recuou mas nao comprado)
+    - ATR acima do minimo
+
+  Logica: "compra o pullback na tendencia"
+
+4.2 — MOMENTUM
+  Entra quando momento e forte na direcao da tendencia.
+
+  CALL:
+    - EMA rapida > EMA lenta (tendencia de alta)
+    - RSI > 55 (momento forte para cima)
+
+  PUT:
+    - EMA rapida < EMA lenta (tendencia de baixa)
+    - RSI < 45 (momento forte para baixo)
+
+  Logica: "surfa o impulso"
+
+
+================================================================
+  5. SCORING
+================================================================
+
+Scoring ADITIVO simples (nao multiplicativo):
+
+  Tendencia:      +0.40 max (forca da separacao EMA)
+  RSI favoravel:  +0.30 max (posicao ideal do RSI)
+  Volatilidade:   +0.20 (ATR OK)
+  Payout bom:     +0.10 (payout >= 80% = +0.10, >= 70% = +0.05)
+
+  Score maximo: 1.00
+  Threshold: 0.35 (score > 0.35 = entra)
+
+  SEM:
+  - Multiplicacao em cascata
+  - Penalidades compostas
+  - Colapso probabilistico
+  - 20 camadas de bloqueio
+
+
+================================================================
+  6. FILTROS (MINIMOS)
+================================================================
+
+Apenas filtros ESSENCIAIS e justificados:
+
+  - Payout minimo: 60% (padrao, configuravel)
+  - Cooldown pos-trade: 15s
+  - Cooldown pos-loss streak: 60s
+  - Stop gain: $30 (padrao)
+  - Stop loss: -$15 (padrao)
+  - Max losses consecutivos: 3
+  - Posicao unica: apenas 1 trade por vez
+  - Volatilidade: ATR minimo para evitar mercado morto
+
+  Todo filtro que nao prova utilidade sera REMOVIDO.
+
+
+================================================================
+  7. RISK MANAGEMENT
+================================================================
+
+  Stop Gain:    para a sessao quando PnL >= $30
+  Stop Loss:    para a sessao quando PnL <= -$15
+  Max Losses:   apos 3 losses consecutivos, cooldown de 60s
+  Cooldown:     15s entre trades
+  Position:     apenas 1 trade por vez (sem double order)
+  Max Trades:   50 por sessao (protecao contra overtrading)
+
+  Objetivo: sobrevivencia + consistencia.
+  NAO e "nunca perder", e "ganhar mais do que perde".
+
+
+================================================================
+  8. SHADOW MODE
+================================================================
+
+  Comando: python main.py --shadow
+
+  O que faz:
+  - Executa logica COMPLETA de scan + estrategia + scoring
+  - NAO envia ordem real ao broker
+  - Registra TUDO em CSV (data/shadow/shadow_YYYYMMDD.csv)
+
+  Campos registrados:
+  - timestamp, datetime, ativo, direcao, estrategia
+  - score, payout, RSI, ATR, hora UTC
+  - decisao (EXECUTE/BLOCK), motivo do bloqueio
+  - resultado simulado, profit simulado
+
+  Objetivo: gerar milhares de amostras rapidamente para
+  validar edge antes de operar com dinheiro real.
+
+
+================================================================
+  9. ANALYTICS
+================================================================
+
+  Metricas calculadas:
+  - Winrate (geral e por dimensao)
+  - Expectancy (lucro medio por trade)
+  - PnL total
+  - Max Drawdown
+  - Sharpe ratio simples
+
+  Por dimensao:
+  - Por ativo (EURUSD-OTC, GBPUSD-OTC, etc)
+  - Por estrategia (trend_pullback, momentum)
+  - Por hora UTC (00h-23h)
+
+  Objetivo: descobrir RAPIDAMENTE o que funciona e o que nao.
+  Relatorio impresso automaticamente ao parar o sistema.
+
+
+================================================================
+  10. ATIVOS MONITORADOS
+================================================================
+
+  OTC (funcionam 24h):
+    EURUSD-OTC, GBPUSD-OTC, EURJPY-OTC, USDJPY-OTC,
+    AUDCAD-OTC, AUDUSD-OTC, EURGBP-OTC, GBPJPY-OTC,
+    NZDUSD-OTC, USDCAD-OTC, USDCHF-OTC
+
+  Forex regular:
+    EURUSD, GBPUSD, USDJPY, AUDUSD, EURJPY
+
+  Total: 16 ativos
+  Discovery automatico: detecta ativos abertos via broker
+
+
+================================================================
+  11. COMO USAR
+================================================================
+
+  INSTALAR:
+    1. Copiar pasta para desktop
+    2. Criar .env com credenciais (ou usar o launcher)
+    3. Rodar: python instalar.bat (ou pip install -r requirements.txt)
+
+  LAUNCHER (recomendado):
+    python start.py
+    - Preencher email e senha
+    - Clicar "SHADOW MODE" para simular
+    - Clicar "LIVE MODE" para operar em demo
+    - Console mostra logs em tempo real
+
+  LINHA DE COMANDO:
+    python main.py --shadow                    # Shadow mode
+    python main.py                             # Live demo
+    python main.py --shadow --interval 15      # Shadow rapido
+    python main.py --amount 5 --duration 120   # Custom
+
+  ARQUIVO .env:
+    IQ_EMAIL=seu@email.com
+    IQ_PASSWORD=sua_senha
+    IQ_PRACTICE=true
+    IQ_AMOUNT=2.0
+    IQ_DURATION=60
+    STOP_GAIN=30
+    STOP_LOSS=-15
+
+
+================================================================
+  12. ARQUIVOS DO PROJETO
+================================================================
+
+  main.py                    — Entry point principal
+  start.py                   — Launcher Tkinter
+  instalar.bat               — Instalacao automatica
+  .env                       — Credenciais (nao commitado)
+  requirements.txt           — Dependencias
+
+  scanner/
+    indicators.py            — EMA, RSI, ATR
+    scanner.py               — Scanner de ativos
+
+  strategies/
+    trend_pullback.py        — Estrategia Trend Pullback
+    momentum.py              — Estrategia Momentum
+
+  risk/
+    risk_manager.py          — Gestao de risco
+
+  execution/
+    broker.py                — Adapter IQ Option
+    shadow.py                — Shadow mode
+
+  analytics/
+    tracker.py               — Analytics (winrate, sharpe, etc)
+
+  logs/
+    logger.py                — Trade logger CSV
+
+  tests/
+    test_indicators.py       — 11 testes indicadores
+    test_strategies.py       — 6 testes estrategias
+    test_risk.py             — 11 testes risk manager
+    test_analytics.py        — 10 testes analytics
+    test_shadow.py           — 3 testes shadow mode
+
+  Total: ~1.700 linhas | 14 arquivos | 40 testes
+
+
+================================================================
+  13. TESTES
+================================================================
+
+  40 testes unitarios, todos passando.
+
+  Rodar: python -m pytest tests/ -v
+
+  Cobertura:
+    Indicadores: EMA, RSI, ATR (basico, edge cases, bounds)
+    Estrategias: uptrend, downtrend, score range
+    Risk: stop gain/loss, cooldown, position lock, stats
+    Analytics: winrate, expectancy, drawdown, sharpe, agrupamentos
+    Shadow: record, CSV, report
+
+
+================================================================
+  14. DIFERENCAS DO SYNTRIX PRINCIPAL
+================================================================
+
+  SYNTRIX PRINCIPAL:
+    - 75+ arquivos, 13.000+ linhas
+    - 22+ modulos complexos
+    - Asset DNA, OTC Intelligence, Market Phase (10 fases)
+    - Meta Scoring multiplicativo
+    - Adaptive thresholds, microstructure, strategy health
+    - EventBus assincrono, replay engine, event sourcing
+    - Resultado: nao operava
+
+  SYNTRIX LITE:
+    - 14 arquivos, ~1.700 linhas
+    - 6 modulos simples
+    - 2 estrategias, 3 indicadores
+    - Scoring aditivo
+    - Threshold unico direto
+    - Resultado: OPERA
+
+
+================================================================
+  15. HISTORICO DE ATUALIZACOES
+================================================================
+
+  [2026-05-09] v1.0.0 — LANCAMENTO
+    - Sistema completo minimalista
+    - 2 estrategias: Trend Pullback + Momentum
+    - 3 indicadores: EMA, RSI, ATR
+    - Scoring aditivo simples
+    - Risk manager: stop gain/loss, cooldown, position lock
+    - Shadow mode completo
+    - Analytics: winrate, expectancy, drawdown, sharpe
+    - Broker adapter IQ Option (iqbroker)
+    - Trade logger CSV
+    - Launcher Tkinter (start.py)
+    - 40 testes passando
+    - .env com credenciais pre-configurado
+
+
+================================================================
+  16. PROXIMAS MELHORIAS PLANEJADAS
+================================================================
+
+  - [ ] Calibracao de threshold baseada em shadow data
+  - [ ] Auto-descoberta de melhores horarios
+  - [ ] Notificacoes via Telegram
+  - [ ] Historico visual de trades
+  - [ ] Backtesting com dados historicos
+  - [ ] Ajuste automatico de valor baseado em winrate
+  - [ ] Dashboard web simples
+  - [ ] Export de relatorios em PDF
+
+
+================================================================
+  FIM DO DOCUMENTO
+  Atualizado em: 2026-05-09
+================================================================
