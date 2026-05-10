@@ -9,7 +9,7 @@ Pipeline:
 MULTI-ASSET SCAN -> RAW SIGNALS -> META SCORE -> OPPORTUNITY RANKING
 -> DECISION ENGINE -> RISK ENGINE -> EXECUTION -> RESULT
 
-Supports: --headless, --diagnostic, --profile, --interval, --config
+Supports: --headless, --diagnostic, --profile, --interval, --config, --shadow
 """
 
 from __future__ import annotations
@@ -25,6 +25,10 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from analytics.calibration import ProbabilityCalibrationEngine
+from analytics.edge_discovery import EdgeDiscoveryEngine
+from analytics.learning import AdaptiveLearningLayer
+from analytics.operation_report import CycleRecord, OperationReport
 from analytics.trade_analytics import TradeAnalytics, TradeRecord
 from assets.asset_dna import AssetDNAManager
 from brokers.base import TradeDirection
@@ -45,6 +49,7 @@ from decision.engine import DecisionEngine, Opportunity
 from event_store.sqlite_store import SQLiteEventStore
 from execution.engine import ExecutionEngine
 from execution.position_lock import PositionInfo, PositionLockManager, PositionState
+from execution.shadow_mode import ShadowMode, ShadowTrade
 from features.feature_store import FeatureRecord, FeatureStore
 from trade_logging.trade_logger import TradeLogger, TradeSnapshot
 from replay.engine import ReplayEngine
@@ -102,6 +107,7 @@ class Syntrix:
         config_path: Optional[str] = None,
         profile: Optional[str] = None,
         diagnostic: bool = False,
+        shadow: bool = False,
     ) -> None:
         self._config = ConfigLoader(config_path) if config_path else ConfigLoader()
         self._profile_name = profile or self._config.get_default_profile_name()
@@ -109,6 +115,7 @@ class Syntrix:
         self._session_id = str(uuid.uuid4())[:8]
         self._running = False
         self._diagnostic = diagnostic
+        self._shadow = shadow
 
         # Core
         self._event_bus = EventBus(num_workers=4)
@@ -150,7 +157,7 @@ class Syntrix:
             max_trades_per_hour=ctx_cfg.get("max_trades_per_hour", 10),
             max_drawdown_pct=ctx_cfg.get("max_drawdown_pct", 10.0),
             cooldown_seconds=ctx_cfg.get("cooldown_seconds", 30),
-            base_threshold=profile_data.get("scoring", {}).get("min_final_score", 0.50),
+            base_threshold=profile_data.get("scoring", {}).get("min_final_score", 0.40),
         )
 
         # Risk
@@ -225,6 +232,21 @@ class Syntrix:
         # Feature store
         self._feature_store = FeatureStore()
 
+        # Shadow mode
+        self._shadow_mode = ShadowMode() if shadow else None
+
+        # Operation report
+        self._op_report = OperationReport()
+
+        # Probability calibration
+        self._calibration = ProbabilityCalibrationEngine()
+
+        # Edge discovery
+        self._edge_discovery = EdgeDiscoveryEngine()
+
+        # Adaptive learning
+        self._learning = AdaptiveLearningLayer()
+
         # UI
         self._ui = None
 
@@ -240,6 +262,8 @@ class Syntrix:
         logger.info("  Assets: %d registered", len(self._asset_registry.all_assets))
         if self._diagnostic:
             logger.info("  DIAGNOSTIC MODE ACTIVE")
+        if self._shadow:
+            logger.info("  SHADOW MODE ACTIVE (no real orders)")
         logger.info("=" * 50)
 
         # Start event bus
@@ -421,6 +445,30 @@ class Syntrix:
         amount = self._config.get_trade_amount(self._profile_name)
         duration = self._config.get_trade_duration(self._profile_name)
 
+        # Shadow mode: record everything but don't execute
+        if self._shadow:
+            shadow_trade = ShadowTrade(
+                timestamp=time.time(), asset=best.asset,
+                direction=best.direction, strategy=best.strategy,
+                regime=best.regime, market_phase=best.market_phase,
+                hour_utc=hour_utc, payout=best.payout,
+                base_score=best.meta_score, meta_score=best.meta_score,
+                confidence=best.confidence, rank_score=best.rank_score,
+                asset_quality=best.asset_quality, otc_quality=best.otc_quality,
+                volatility=best.volatility, latency_ms=best.latency_ms,
+                strategy_consensus=len(best.individual_scores),
+                threshold_used=0, decision="SHADOW_EXECUTE",
+                correlation_id=correlation_id,
+            )
+            self._shadow_mode.record_signal(shadow_trade)
+            logger.info(
+                "SHADOW: %s %s %s meta=%.3f rank=%.3f payout=%.0f%%",
+                best.direction, best.asset, best.strategy,
+                best.meta_score, best.rank_score, best.payout * 100,
+            )
+            self._state_machine.transition(OperationalState.SCANNING, reason="Shadow cycle complete")
+            return
+
         pos_info = PositionInfo(
             asset=best.asset,
             direction=best.direction,
@@ -563,6 +611,25 @@ class Syntrix:
                 profit=trade_result.profit,
             ))
 
+            # Feed calibration + edge discovery + learning
+            self._calibration.record(
+                confidence=best.confidence, won=won, payout=best.payout,
+                asset=best.asset, strategy=best.strategy,
+                regime=best.regime, hour_utc=hour_utc,
+                meta_score=best.meta_score,
+            )
+            self._edge_discovery.record_trade(
+                asset=best.asset, strategy=best.strategy,
+                regime=best.regime, market_phase=best.market_phase,
+                hour_utc=hour_utc, won=won, payout=best.payout,
+                meta_score=best.meta_score, confidence=best.confidence,
+            )
+            self._learning.record_outcome(
+                strategy=best.strategy, asset=best.asset, won=won,
+                confidence=best.confidence, meta_score=best.meta_score,
+                payout=best.payout, regime=best.regime, hour_utc=hour_utc,
+            )
+
             logger.info(
                 "TRADE %s %s %s $%.2f → %s ($%.2f) latency=%.0fms",
                 best.direction, best.asset, best.strategy,
@@ -631,13 +698,32 @@ class Syntrix:
 
         if ctx_result["blocked"]:
             self._asset_registry.record_block(asset)
+            block_reasons = ctx_result.get("block_reasons", [])
+            block_str = ", ".join(block_reasons) if block_reasons else "confidence_too_low"
+            # Report blocked signal
+            self._op_report.record_signal(
+                allowed=False,
+                confidence=ctx_result.get("confidence", 0),
+                block_reason=block_str,
+            )
+            # Shadow mode: record blocked signals too
+            if self._shadow_mode:
+                shadow_trade = ShadowTrade(
+                    timestamp=time.time(), asset=asset,
+                    direction="", payout=payout,
+                    confidence=ctx_result.get("confidence", 0),
+                    block_reasons=block_str,
+                    decision="BLOCK", correlation_id=correlation_id,
+                    hour_utc=hour_utc,
+                )
+                self._shadow_mode.record_signal(shadow_trade)
             # Record feature for blocked
             self._feature_store.record(FeatureRecord(
                 asset=asset, regime="", payout=payout,
                 hour_utc=hour_utc, context_decision="block",
                 confidence=ctx_result.get("confidence", 0),
                 threshold_used=ctx_result.get("threshold", 0),
-                block_reasons=ctx_result.get("block_reasons", []),
+                block_reasons=block_reasons,
                 result="blocked",
             ))
             return None
@@ -689,7 +775,8 @@ class Syntrix:
             context_quality=context_confidence,
         )
 
-        if not ensemble_result["passed"]:
+        # In shadow mode, don't filter by ensemble pass (we want ALL signals)
+        if not ensemble_result["passed"] and not self._shadow:
             return None
 
         best_signal = ensemble_result.get("best_signal")
@@ -719,7 +806,7 @@ class Syntrix:
             ) + self._asset_dna.get_adaptive_threshold(asset),
         )
 
-        if not meta_result.passed:
+        if not meta_result.passed and not self._shadow:
             if self._diagnostic:
                 print(f"    [{asset}] META REJECT: {meta_result.reason}")
             return None
@@ -756,6 +843,11 @@ class Syntrix:
             + micro.quality_score * 0.05
             + hist_wr * 0.10,
             4,
+        )
+
+        # Record allowed signal
+        self._op_report.record_signal(
+            allowed=True, confidence=context_confidence,
         )
 
         if self._diagnostic:
@@ -860,6 +952,28 @@ class Syntrix:
         # Flush feature store
         self._feature_store.close()
 
+        # Print operation report
+        print(self._op_report.format_report())
+
+        # Print shadow report if shadow mode
+        if self._shadow_mode:
+            print(self._shadow_mode.get_report())
+            self._shadow_mode.close()
+
+        # Print calibration report if enough data
+        cal = self._calibration.calibrate()
+        if cal.total_trades >= 10:
+            print(self._calibration.format_report())
+
+        # Print edge discovery if enough data
+        edge = self._edge_discovery.discover()
+        if edge.total_trades >= 20:
+            print(self._edge_discovery.format_report())
+
+        # Print learning state
+        if self._learning.get_state().total_updates > 0:
+            print(self._learning.format_report())
+
         # Flush trade logs
         self._trade_logger.close()
 
@@ -936,10 +1050,15 @@ def main() -> None:
     parser.add_argument("--diagnostic", action="store_true",
                         help="Enable diagnostic mode (detailed trace output)")
     parser.add_argument("--interval", type=float, default=60.0, help="Scan interval in seconds")
+    parser.add_argument("--shadow", action="store_true",
+                        help="Shadow mode — simulate all trades without real orders")
     args = parser.parse_args()
 
     load_env()
-    syntrix = Syntrix(config_path=args.config, profile=args.profile, diagnostic=args.diagnostic)
+    syntrix = Syntrix(
+        config_path=args.config, profile=args.profile,
+        diagnostic=args.diagnostic, shadow=args.shadow,
+    )
 
     def signal_handler(sig, frame):
         syntrix.stop()

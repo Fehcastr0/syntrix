@@ -35,7 +35,7 @@ profiles:
       cooldown_seconds: 30
       blocked_regimes: ["unstable"]
     scoring:
-      min_final_score: 0.50
+      min_final_score: 0.40
     trade:
       amount: 2.0
       duration: 60

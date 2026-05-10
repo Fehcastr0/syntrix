@@ -2,8 +2,8 @@
   SYNTRIX v2.0 — Motor Probabilistico Quantitativo Adaptativo
   Sistema Operacional Modular Orientado a Eventos para Trading
 ================================================================
-  Versao: 2.0.0
-  Ultima atualizacao: 2026-05-09 20:37 UTC
+  Versao: 2.1.0
+  Ultima atualizacao: 2026-05-09 21:30 UTC
   Repositorio: https://github.com/Fehcastr0/syntrix
   PR: https://github.com/Fehcastr0/syntrix/pull/1
 ================================================================
@@ -839,6 +839,90 @@ Instalacao automatica: instalar.bat ou via auto-install nos apps.
     - 14 testes atualizados para nova API
     - Zero falhas
 
+[2026-05-09 21:30 UTC] v2.1.0 — CALIBRACAO OPERACIONAL + SHADOW MODE
+  Sistema calibrado para OPERAR. De "arquitetura impressionante" para
+  "motor funcional, ativo, calibrado e adaptativo".
+
+  PROBLEMA RESOLVIDO:
+    O sistema estava excessivamente conservador e NAO fazia entradas.
+    Modelo multiplicativo de confianca (mod1 x mod2 x mod3...) produzia
+    valores muito baixos. Multiplos filtros soft com penalidades agressivas
+    bloqueavam praticamente todos os trades.
+
+  SOLUCOES IMPLEMENTADAS:
+
+  1. CALIBRACAO DE FILTROS:
+    - ContextGate: modifiers suavizados (0.85-0.95 em vez de 0.50-0.70)
+    - CAUTION agora permite trades (antes bloqueava)
+    - Meta Scoring: media geometrica em vez de multiplicacao bruta
+    - OTC Analyzer: usa min(modifiers) em vez de multiplicar todos
+    - Decision Engine: thresholds reduzidos (confidence 0.30, meta 0.35)
+    - Context base_threshold: 0.50 -> 0.40
+    - Scoring min_final_score: 0.50 -> 0.40
+
+  2. SHADOW MODE (execution/shadow_mode.py):
+    - python main.py --shadow --diagnostic
+    - Simula TODAS as entradas sem enviar ordem real
+    - Registra tudo: ativo, direcao, estrategia, regime, fase, score,
+      meta_score, confidence, payout, volatility, OTC quality, etc
+    - Salva em CSV (data/shadow/shadow_YYYYMMDD.csv)
+    - Gera relatorio automatico ao parar (data/shadow/report_*.txt)
+    - Registra sinais bloqueados tambem para analise
+    - Objetivo: gerar milhares de samples rapidamente
+
+  3. RELATORIO 'POR QUE NAO OPEROU' (analytics/operation_report.py):
+    - block_rate_by_reason: frequencia de cada motivo de bloqueio
+    - allow_rate: taxa de sinais permitidos
+    - confidence_distribution: distribuicao de confianca
+    - Recomendacoes automaticas quando sistema muito restritivo
+    - Impresso automaticamente ao parar o sistema
+
+  4. PROBABILITY CALIBRATION (analytics/calibration.py):
+    - Converte scores heuristicos em probabilidade REAL
+    - confidence=0.72 -> "historicamente 64% winrate"
+    - Calibration curves por bucket (0.0-1.0, step 0.10)
+    - Rolling expectancy por bucket
+    - Detecta over/underconfidence
+    - Calcula optimal threshold automaticamente
+    - Relatorio formatado
+
+  5. EDGE DISCOVERY ENGINE (analytics/edge_discovery.py):
+    - Descobre melhores ativos/horarios/fases/estrategias
+    - Analisa por dimensao: asset, strategy, regime, phase, hour
+    - Analisa combinacoes: asset+regime, strategy+phase, asset+hour
+    - Ranking por expectancy
+    - Confianca estatistica baseada em sample size
+    - Relatorio formatado com top edges
+
+  6. ADAPTIVE LEARNING LAYER (analytics/learning.py):
+    - Ajuste automatico de pesos de estrategia
+    - Ajuste de threshold por ativo (bons=menor, ruins=maior)
+    - Correcao de score bias (overconfidence/underconfidence)
+    - Recalibracao periodica (a cada 20 trades)
+    - Learning rate configuravel
+    - Estado persistente durante sessao
+
+  ARQUIVOS NOVOS (4 modulos):
+    execution/shadow_mode.py       Shadow Mode (simulacao sem ordem real)
+    analytics/calibration.py       Probability Calibration Engine
+    analytics/edge_discovery.py    Edge Discovery Engine
+    analytics/learning.py          Adaptive Learning Layer
+    analytics/operation_report.py  Operation Report (POR QUE NAO OPEROU)
+
+  ARQUIVOS MODIFICADOS:
+    main.py              Integracao shadow mode, calibracao, edge, learning
+    context/context_gate.py  Modifiers suavizados, CAUTION permite trades
+    strategies/meta_scoring.py  Media geometrica, fatores menos punitivos
+    context/otc_analyzer.py  min(modifiers), penalidades reduzidas
+    config/profiles.yaml  min_final_score: 0.50 -> 0.40
+
+  COMO USAR:
+    python main.py --headless                      # Normal (faz trades reais)
+    python main.py --shadow --diagnostic           # Shadow (simula tudo)
+    python main.py --shadow --diagnostic --interval 15  # Shadow rapido
+
+  TESTES: 77 testes passando. Zero falhas.
+
 
 ================================================================
   20. PROXIMAS FUNCIONALIDADES PLANEJADAS
@@ -854,6 +938,12 @@ Instalacao automatica: instalar.bat ou via auto-install nos apps.
   - [x] Microstructure analysis — FEITO v2.0
   - [x] Feature store para ML futuro — FEITO v2.0
   - [x] Monte Carlo / equity smoothness — FEITO v2.0
+  - [x] Shadow mode para simulacao — FEITO v2.1
+  - [x] Calibracao de filtros (menos conservador) — FEITO v2.1
+  - [x] Relatorio "POR QUE NAO OPEROU" — FEITO v2.1
+  - [x] Probability Calibration Engine — FEITO v2.1
+  - [x] Edge Discovery Engine — FEITO v2.1
+  - [x] Adaptive Learning Layer — FEITO v2.1
   - [ ] Martingale opcional (com limites de seguranca)
   - [ ] Notificacoes via Telegram
   - [ ] Historico visual de trades
@@ -866,5 +956,5 @@ Instalacao automatica: instalar.bat ou via auto-install nos apps.
 
 ================================================================
   FIM DO DOCUMENTO
-  Atualizado em: 2026-05-09 20:37 UTC
+  Atualizado em: 2026-05-09 21:30 UTC
 ================================================================
