@@ -14,22 +14,22 @@ from strategies.trend_pullback import Signal
 
 def evaluate(scan: ScanResult) -> Optional[Signal]:
     """
-    CALL: EMA fast > EMA slow + RSI > 55 (strong upward momentum)
-    PUT:  EMA fast < EMA slow + RSI < 45 (strong downward momentum)
+    CALL: EMA fast > EMA slow + RSI > 50 (momentum in trend direction)
+    PUT:  EMA fast < EMA slow + RSI < 50 (momentum in trend direction)
     """
     r = scan.current_rsi
 
     direction = ""
     momentum_strength = 0.0
 
-    if scan.trend_up and r > 55:
+    if scan.trend_up and r > 50:
         direction = "call"
-        # Stronger momentum = higher score, capped at RSI 75
-        momentum_strength = min(1.0, (r - 55) / 20.0)
+        # Stronger momentum = higher score, capped at RSI 80
+        momentum_strength = min(1.0, (r - 50) / 25.0)
 
-    elif scan.trend_down and r < 45:
+    elif scan.trend_down and r < 50:
         direction = "put"
-        momentum_strength = min(1.0, (45 - r) / 20.0)
+        momentum_strength = min(1.0, (50 - r) / 25.0)
 
     if not direction:
         return None
@@ -55,7 +55,9 @@ def evaluate(scan: ScanResult) -> Optional[Signal]:
     if scan.payout >= 0.80:
         score += 0.10
     elif scan.payout >= 0.70:
-        score += 0.05
+        score += 0.07
+    elif scan.payout >= 0.50:
+        score += 0.03
 
     return Signal(
         asset=scan.asset,

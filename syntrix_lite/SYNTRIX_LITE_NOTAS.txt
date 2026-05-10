@@ -354,11 +354,74 @@ Apenas filtros ESSENCIAIS e justificados:
     - 40 testes passando
     - .env com credenciais pre-configurado
 
+  [2026-05-09] v1.1.0 — DEBUG OPERACIONAL + FORCE ENTRY
+    PROBLEMA: sistema nao fazia entradas
+
+    CAUSA RAIZ IDENTIFICADA:
+      - Threshold muito alto (0.35) bloqueava maioria dos sinais
+      - RSI ranges muito estreitos (40-65 call, 35-60 put)
+      - ATR minimo muito alto (0.0001) bloqueava ativos calmos
+      - Payout minimo 60% eliminava ativos validos
+      - Cooldown 15s entre trades muito longo
+      - Logs em nivel DEBUG nao apareciam — usuario nao via NADA
+      - Nenhum log quando ciclo nao gerava sinais
+
+    SOLUCOES IMPLEMENTADAS:
+
+      1. DEBUG COMPLETO DO PIPELINE
+        - Logs em CADA etapa: SCAN, INDICATORS, STRATEGY, SCORE, RISK, DECISION
+        - Cada ativo mostra: EMA, RSI, ATR, payout, trend, volatility
+        - Cada estrategia mostra: signal/no_signal, score, direction
+        - Decisao mostra: PASS/REJECT e motivo exato
+        - Cycles numerados para tracking
+
+      2. FORCE ENTRY MODE (--force)
+        - Threshold reduzido para 0.10 (era 0.35)
+        - Ignora filtro de volatilidade
+        - Objetivo: confirmar se pipeline funciona end-to-end
+        - Botao no launcher: "FORCE ENTRY (score > 0.10 = entra)"
+
+      3. RESTRICOES REDUZIDAS
+        - Threshold: 0.35 -> 0.15 (normal) / 0.10 (force)
+        - Payout minimo: 60% -> 50%
+        - ATR ratio: 0.0001 -> 0.00001 (aceita quase tudo)
+        - Cooldown trade: 15s -> 5s
+        - Cooldown loss: 60s -> 30s
+        - Max consecutive losses: 3 -> 5
+        - Max trades session: 50 -> 100
+
+      4. RSI RANGES AMPLIADOS
+        - Trend Pullback CALL: 40-65 -> 30-70
+        - Trend Pullback PUT: 35-60 -> 30-70
+        - Momentum CALL: >55 -> >50
+        - Momentum PUT: <45 -> <50
+
+      5. METRICAS OPERACIONAIS (OperationalMetrics)
+        - scans_total, no_candles, scan_failed
+        - low_payout, low_volatility, no_trend
+        - strategy_matches, scores_above/below_threshold
+        - blocked_by_risk, execution_attempts/success/failures
+        - shadow_executes
+        - Relatorio automatico a cada 5 minutos
+
+      6. TRACEBACK COMPLETO
+        - Toda excecao mostra traceback completo
+        - Nunca except: pass
+        - Errors de broker, candles, execution — tudo visivel
+
+      7. LAUNCHER ATUALIZADO
+        - Checkbox "FORCE ENTRY" no painel de config
+        - Passa --force automaticamente quando marcado
+
 
 ================================================================
   16. PROXIMAS MELHORIAS PLANEJADAS
 ================================================================
 
+  - [x] Debug completo do pipeline
+  - [x] Force entry mode
+  - [x] Reducao de restricoes
+  - [x] Metricas operacionais
   - [ ] Calibracao de threshold baseada em shadow data
   - [ ] Auto-descoberta de melhores horarios
   - [ ] Notificacoes via Telegram

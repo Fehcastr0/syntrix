@@ -24,22 +24,22 @@ class Signal:
 
 def evaluate(scan: ScanResult) -> Optional[Signal]:
     """
-    CALL: EMA fast > EMA slow + RSI 45-65 (pulled back, not overbought)
-    PUT:  EMA fast < EMA slow + RSI 35-55 (pulled back, not oversold)
+    CALL: EMA fast > EMA slow + RSI 30-70 (wide range to generate signals)
+    PUT:  EMA fast < EMA slow + RSI 30-70 (wide range to generate signals)
     """
     r = scan.current_rsi
 
     direction = ""
     rsi_score = 0.0
 
-    if scan.trend_up and 40 <= r <= 65:
+    if scan.trend_up and 30 <= r <= 70:
         direction = "call"
         # Best score when RSI is near 50 (pullback zone)
-        rsi_score = 1.0 - abs(r - 52.5) / 25.0
+        rsi_score = 1.0 - abs(r - 52.5) / 30.0
 
-    elif scan.trend_down and 35 <= r <= 60:
+    elif scan.trend_down and 30 <= r <= 70:
         direction = "put"
-        rsi_score = 1.0 - abs(r - 47.5) / 25.0
+        rsi_score = 1.0 - abs(r - 47.5) / 30.0
 
     if not direction:
         return None
@@ -65,7 +65,9 @@ def evaluate(scan: ScanResult) -> Optional[Signal]:
     if scan.payout >= 0.80:
         score += 0.10
     elif scan.payout >= 0.70:
-        score += 0.05
+        score += 0.07
+    elif scan.payout >= 0.50:
+        score += 0.03
 
     return Signal(
         asset=scan.asset,

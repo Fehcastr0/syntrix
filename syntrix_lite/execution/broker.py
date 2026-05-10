@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import time
+import traceback
 from dataclasses import dataclass
 from typing import Any, List, Optional
 
@@ -86,6 +87,7 @@ class BrokerAdapter:
         try:
             return float(self._api.get_balance())
         except Exception:
+            logger.warning("get_balance error: %s", traceback.format_exc())
             return 0.0
 
     def get_candles(self, asset: str, timeframe: int = 60, count: int = 50) -> List[Candle]:
@@ -104,7 +106,7 @@ class BrokerAdapter:
                 ))
             return candles
         except Exception as e:
-            logger.debug("Candles error %s: %s", asset, e)
+            logger.warning("Candles error %s: %s", asset, e)
             return []
 
     def get_payout(self, asset: str) -> float:
@@ -116,6 +118,7 @@ class BrokerAdapter:
                 return float(data[asset].get("turbo", 0)) / 100.0
             return 0.0
         except Exception:
+            logger.warning("Payout error %s: %s", asset, traceback.format_exc())
             return 0.0
 
     def buy(self, asset: str, amount: float, direction: str, duration: int) -> TradeResult:
@@ -173,4 +176,5 @@ class BrokerAdapter:
                     open_assets.append(asset_name)
             return open_assets
         except Exception:
+            logger.warning("get_open_assets error: %s", traceback.format_exc())
             return []

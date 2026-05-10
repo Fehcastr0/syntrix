@@ -173,6 +173,14 @@ class SyntrixLiteLauncher:
                  bg="#1a1a2e", fg="#ffffff", insertbackground="#ffffff",
                  relief="flat", bd=5, width=10).pack(anchor="w")
 
+        # Force entry checkbox
+        self.force_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(config_card, text="FORCE ENTRY (score > 0.10 = entra)",
+                       variable=self.force_var, font=("Segoe UI", 10),
+                       bg="#141428", fg="#ff6b6b", selectcolor="#1a1a2e",
+                       activebackground="#141428", activeforeground="#ff6b6b",
+                       ).pack(anchor="w", pady=(5, 5))
+
         # Save config button
         ttk.Button(config_card, text="Salvar Configuração",
                    style="Config.TButton", command=self._save_config).pack(fill="x", pady=(5, 0))
@@ -263,6 +271,8 @@ class SyntrixLiteLauncher:
         ]
         if shadow:
             cmd.append("--shadow")
+        if self.force_var.get():
+            cmd.append("--force")
 
         mode = "SHADOW" if shadow else "LIVE"
         self.status_var.set(f"Rodando ({mode})...")
