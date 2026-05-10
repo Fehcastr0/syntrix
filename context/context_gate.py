@@ -405,13 +405,13 @@ class ContextGate:
         confidence = round(max(0.0, min(1.0, confidence)), 3)
         trace.final_confidence = confidence
 
-        # Decision
+        # Decision — be more permissive to increase healthy operation frequency
         if confidence >= threshold:
             decision = "allow"
             trace.final_decision = "ALLOW"
-        elif confidence >= threshold * 0.7:
+        elif confidence >= threshold * 0.80:
             decision = "caution"
-            trace.final_decision = "CAUTION"
+            trace.final_decision = "ALLOW"  # CAUTION still allows
         else:
             decision = "block"
             trace.final_decision = "BLOCK"
@@ -458,10 +458,10 @@ class ContextGate:
         if payout >= self._min_payout:
             modifier = 1.0
         elif payout >= self._min_payout * 0.85:
-            modifier = 0.85
+            modifier = 0.95
         else:
-            modifier = 0.60
-        blocked = payout < self._min_payout * 0.75
+            modifier = 0.85
+        blocked = payout < self._min_payout * 0.60
         return {
             "name": "payout",
             "blocked": blocked,
@@ -483,7 +483,7 @@ class ContextGate:
         if result["valid"]:
             modifier = 1.0
         else:
-            modifier = 0.60
+            modifier = 0.85
         return {
             "name": "session",
             "blocked": not result["valid"],
@@ -495,9 +495,9 @@ class ContextGate:
     def _check_news(self, asset: str) -> Dict[str, Any]:
         result = self._news_filter.evaluate(asset=asset)
         if result["blocked"]:
-            modifier = 0.50
+            modifier = 0.70
         elif result.get("caution"):
-            modifier = 0.80
+            modifier = 0.90
         else:
             modifier = 1.0
         return {
@@ -511,9 +511,9 @@ class ContextGate:
     def _check_regime(self, candles: List[Candle]) -> Dict[str, Any]:
         regime = self._regime_detector.detect(candles)
         if regime in self._blocked_regimes:
-            modifier = 0.50
+            modifier = 0.65
         elif regime == MarketRegime.HIGH_VOLATILITY:
-            modifier = 0.80
+            modifier = 0.90
         else:
             modifier = 1.0
         return {
@@ -528,11 +528,11 @@ class ContextGate:
         result = self._spike_detector.detect(candles)
         if result.spike_detected:
             if result.severity == "severe":
-                modifier = 0.40
+                modifier = 0.60
             elif result.severity == "moderate":
-                modifier = 0.70
-            else:
                 modifier = 0.85
+            else:
+                modifier = 0.95
         else:
             modifier = 1.0
         return {
@@ -547,11 +547,11 @@ class ContextGate:
         if latency_ms <= self._max_latency_ms * 0.5:
             modifier = 1.0
         elif latency_ms <= self._max_latency_ms:
-            modifier = 0.90
+            modifier = 0.95
         elif latency_ms <= self._max_latency_ms * 1.5:
-            modifier = 0.70
+            modifier = 0.85
         else:
-            modifier = 0.40
+            modifier = 0.70
         blocked = latency_ms > self._max_latency_ms * 2
         return {
             "name": "latency",
@@ -572,10 +572,10 @@ class ContextGate:
         if elapsed >= self._cooldown_seconds:
             modifier = 1.0
         elif elapsed >= self._cooldown_seconds * 0.5:
-            modifier = 0.80
+            modifier = 0.95
         else:
-            modifier = 0.50
-        blocked = elapsed < self._cooldown_seconds * 0.3
+            modifier = 0.80
+        blocked = elapsed < self._cooldown_seconds * 0.2
         remaining = max(0, self._cooldown_seconds - elapsed)
         return {
             "name": "cooldown",

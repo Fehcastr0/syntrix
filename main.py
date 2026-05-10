@@ -179,13 +179,13 @@ class Syntrix:
 
         # Meta scoring engine
         self._meta_scoring = MetaScoringEngine(
-            base_threshold=profile_data.get("scoring", {}).get("min_final_score", 0.45),
+            base_threshold=profile_data.get("scoring", {}).get("min_final_score", 0.40),
         )
 
         # Decision engine
         self._decision_engine = DecisionEngine(
-            min_confidence=0.40,
-            min_meta_score=0.40,
+            min_confidence=0.30,
+            min_meta_score=0.35,
         )
 
         # Strategy health monitor

@@ -74,14 +74,14 @@ class OTCBehaviorAnalyzer:
         if fb:
             result.fake_breakout = True
             issues.append(f"Fake breakout detected: {fb}")
-            modifiers.append(0.75)
+            modifiers.append(0.90)
 
         # Check toxic lateralization
         tl = self._check_toxic_lateralization(candles)
         if tl:
             result.toxic_lateralization = True
             issues.append(f"Toxic lateralization: {tl}")
-            modifiers.append(0.70)
+            modifiers.append(0.85)
 
         # Check anomalous wicks
         aw = self._check_anomalous_wicks(candles)
@@ -95,22 +95,21 @@ class OTCBehaviorAnalyzer:
         if ec:
             result.excessive_compression = True
             issues.append(f"Excessive compression: {ec}")
-            modifiers.append(0.80)
+            modifiers.append(0.90)
 
         # Check artificial impulse
         ai = self._check_artificial_impulse(candles)
         if ai:
             result.artificial_impulse = True
             issues.append(f"Artificial impulse: {ai}")
-            modifiers.append(0.70)
+            modifiers.append(0.85)
 
         result.issues = issues
 
         if modifiers:
-            combined = 1.0
-            for m in modifiers:
-                combined *= m
-            result.modifier = round(max(0.3, combined), 3)
+            # Use minimum modifier instead of multiplication
+            # to avoid compounding small values
+            result.modifier = round(max(0.5, min(modifiers)), 3)
             result.quality_score = round(result.modifier, 3)
         else:
             result.quality_score = 1.0

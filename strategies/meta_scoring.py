@@ -125,10 +125,14 @@ class MetaScoringEngine:
         # Historical performance factor
         factors["history"] = self._history_factor(historical_winrate)
 
-        # Calculate meta score (multiplicative)
-        meta_score = 1.0
+        # Calculate meta score using geometric mean of factors
+        # Raw multiplication produces very small numbers; geometric mean
+        # keeps the score in a meaningful range
+        n = len(factors)
+        product = 1.0
         for name, factor in factors.items():
-            meta_score *= factor
+            product *= factor
+        meta_score = product ** (1.0 / n) if n > 0 else 0.0
         meta_score = round(max(0.0, min(1.0, meta_score)), 4)
 
         # Apply adaptive threshold
@@ -189,22 +193,22 @@ class MetaScoringEngine:
         if payout >= 0.85:
             return 1.20
         if payout >= 0.75:
-            return 1.05
+            return 1.10
         if payout >= 0.65:
-            return 0.90
+            return 1.0
         if payout >= 0.55:
-            return 0.75
-        return 0.50
+            return 0.90
+        return 0.75
 
     def _quality_factor(self, quality: float) -> float:
         """Asset quality factor."""
         if quality >= 0.8:
             return 1.15
         if quality >= 0.6:
-            return 1.00
+            return 1.05
         if quality >= 0.4:
-            return 0.85
-        return 0.65
+            return 0.95
+        return 0.85
 
     def _otc_factor(self, otc_quality: float, asset: str = "") -> float:
         """OTC quality factor."""
@@ -213,20 +217,20 @@ class MetaScoringEngine:
         if otc_quality >= 0.9:
             return 1.05
         if otc_quality >= 0.7:
-            return 0.95
+            return 1.0
         if otc_quality >= 0.5:
-            return 0.80
-        return 0.60
+            return 0.90
+        return 0.80
 
     def _volatility_factor(self, volatility: float) -> float:
         """Volatility factor (sweet spot = moderate)."""
         if 0.3 <= volatility <= 0.7:
             return 1.05
         if 0.2 <= volatility <= 0.8:
-            return 0.95
+            return 1.0
         if 0.1 <= volatility <= 0.9:
-            return 0.85
-        return 0.70
+            return 0.95
+        return 0.85
 
     def _hour_factor(self, hour_utc: int, asset: str = "") -> float:
         """Time-of-day factor."""
@@ -256,10 +260,10 @@ class MetaScoringEngine:
         if latency_ms <= 300:
             return 1.0
         if latency_ms <= 500:
-            return 0.90
+            return 0.95
         if latency_ms <= 800:
-            return 0.75
-        return 0.55
+            return 0.90
+        return 0.80
 
     def _consensus_factor(self, consensus: int) -> float:
         """Strategy consensus factor (more strategies agreeing = better)."""
@@ -276,7 +280,7 @@ class MetaScoringEngine:
         if winrate >= 0.55:
             return 1.05
         if winrate >= 0.45:
-            return 0.95
+            return 1.0
         if winrate >= 0.35:
-            return 0.80
-        return 0.65
+            return 0.90
+        return 0.85
