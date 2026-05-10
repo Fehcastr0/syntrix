@@ -265,6 +265,206 @@ class TradeAnalytics:
             "tilt_indicator": round(self.winrate() - wr_after_loss, 2),
         }
 
+    # ── Expectancy ──
+
+    def expectancy(self, trades: Optional[List[TradeRecord]] = None) -> float:
+        """Calculate expectancy (average profit per trade)."""
+        t = trades or self._trades
+        decided = [x for x in t if x.result in ("win", "loss")]
+        if not decided:
+            return 0.0
+        return round(sum(x.profit for x in decided) / len(decided), 4)
+
+    # ── Loss Clustering ──
+
+    def loss_clustering(self) -> Dict[str, Any]:
+        """Detect loss clustering (consecutive losses)."""
+        decided = [t for t in self._trades if t.result in ("win", "loss")]
+        if len(decided) < 3:
+            return {"sufficient_data": False}
+
+        max_streak = 0
+        current_streak = 0
+        clusters: List[int] = []
+
+        for t in decided:
+            if t.result == "loss":
+                current_streak += 1
+                if current_streak > max_streak:
+                    max_streak = current_streak
+            else:
+                if current_streak >= 2:
+                    clusters.append(current_streak)
+                current_streak = 0
+        if current_streak >= 2:
+            clusters.append(current_streak)
+
+        return {
+            "sufficient_data": True,
+            "max_loss_streak": max_streak,
+            "loss_clusters": len(clusters),
+            "avg_cluster_size": round(sum(clusters) / len(clusters), 1) if clusters else 0,
+            "current_streak": current_streak,
+        }
+
+    # ── Score Degradation ──
+
+    def score_degradation(self, window: int = 20) -> Dict[str, Any]:
+        """Track if average score is degrading over time."""
+        scored = [t for t in self._trades if t.score > 0]
+        if len(scored) < window * 2:
+            return {"degraded": False, "reason": "Insufficient scored trades"}
+
+        recent = scored[-window:]
+        historical = scored[:-window]
+
+        recent_avg = sum(t.score for t in recent) / len(recent)
+        hist_avg = sum(t.score for t in historical) / len(historical)
+        drop = hist_avg - recent_avg
+
+        return {
+            "degraded": drop > 0.10,
+            "recent_avg_score": round(recent_avg, 3),
+            "historical_avg_score": round(hist_avg, 3),
+            "score_drop": round(drop, 3),
+        }
+
+    # ── Performance by Hour ──
+
+    def by_hour(self) -> Dict[int, Dict[str, Any]]:
+        """Performance breakdown by hour of day."""
+        import datetime
+        groups: Dict[int, List[TradeRecord]] = {}
+        for t in self._trades:
+            if t.timestamp > 0:
+                hour = datetime.datetime.utcfromtimestamp(t.timestamp).hour
+            else:
+                hour = 0
+            groups.setdefault(hour, []).append(t)
+
+        result: Dict[int, Dict[str, Any]] = {}
+        for hour, trades in sorted(groups.items()):
+            result[hour] = {
+                "count": len(trades),
+                "winrate": self.winrate(trades),
+                "profit": self.total_profit(trades),
+            }
+        return result
+
+    # ── Monte Carlo Simulation ──
+
+    def monte_carlo(self, simulations: int = 1000, num_trades: int = 100) -> Dict[str, Any]:
+        """Run Monte Carlo simulation on trade distribution."""
+        import random as rng
+        decided = [t for t in self._trades if t.result in ("win", "loss")]
+        if len(decided) < 10:
+            return {"sufficient_data": False}
+
+        profits = [t.profit for t in decided]
+        final_equities: List[float] = []
+        max_drawdowns: List[float] = []
+
+        for _ in range(simulations):
+            equity = 0.0
+            peak = 0.0
+            max_dd = 0.0
+            for _ in range(num_trades):
+                equity += rng.choice(profits)
+                if equity > peak:
+                    peak = equity
+                dd = peak - equity
+                if dd > max_dd:
+                    max_dd = dd
+            final_equities.append(equity)
+            max_drawdowns.append(max_dd)
+
+        final_equities.sort()
+        return {
+            "sufficient_data": True,
+            "simulations": simulations,
+            "num_trades": num_trades,
+            "median_equity": round(final_equities[len(final_equities) // 2], 2),
+            "p5_equity": round(final_equities[int(len(final_equities) * 0.05)], 2),
+            "p95_equity": round(final_equities[int(len(final_equities) * 0.95)], 2),
+            "worst_equity": round(final_equities[0], 2),
+            "best_equity": round(final_equities[-1], 2),
+            "avg_max_drawdown": round(statistics.mean(max_drawdowns), 2),
+            "probability_profit": round(sum(1 for e in final_equities if e > 0) / simulations * 100, 1),
+        }
+
+    # ── Equity Smoothness ──
+
+    def equity_smoothness(self) -> Dict[str, Any]:
+        """Measure how smooth the equity curve is."""
+        decided = [t for t in self._trades if t.result in ("win", "loss")]
+        if len(decided) < 10:
+            return {"sufficient_data": False}
+
+        equity_curve = [0.0]
+        for t in decided:
+            equity_curve.append(equity_curve[-1] + t.profit)
+
+        if len(equity_curve) < 3:
+            return {"sufficient_data": False}
+
+        # R-squared of linear fit
+        n = len(equity_curve)
+        x_vals = list(range(n))
+        x_mean = sum(x_vals) / n
+        y_mean = sum(equity_curve) / n
+        ss_xy = sum((x - x_mean) * (y - y_mean) for x, y in zip(x_vals, equity_curve))
+        ss_xx = sum((x - x_mean) ** 2 for x in x_vals)
+        ss_yy = sum((y - y_mean) ** 2 for y in equity_curve)
+
+        if ss_xx == 0 or ss_yy == 0:
+            r_squared = 0.0
+        else:
+            r_squared = (ss_xy ** 2) / (ss_xx * ss_yy)
+
+        # Volatility of returns
+        returns = [decided[i].profit for i in range(len(decided))]
+        ret_stdev = statistics.stdev(returns) if len(returns) > 1 else 0
+
+        return {
+            "sufficient_data": True,
+            "r_squared": round(r_squared, 4),
+            "return_volatility": round(ret_stdev, 4),
+            "smoothness_score": round(r_squared * 100, 1),
+            "final_equity": round(equity_curve[-1], 2),
+        }
+
+    # ── Edge Stability ──
+
+    def edge_stability(self, window: int = 15) -> Dict[str, Any]:
+        """Measure edge stability over rolling windows."""
+        decided = [t for t in self._trades if t.result in ("win", "loss")]
+        if len(decided) < window * 3:
+            return {"stable": True, "reason": "Insufficient data"}
+
+        winrates: List[float] = []
+        for i in range(0, len(decided) - window + 1, window):
+            chunk = decided[i:i + window]
+            wr = sum(1 for t in chunk if t.result == "win") / len(chunk) * 100
+            winrates.append(wr)
+
+        if len(winrates) < 2:
+            return {"stable": True, "reason": "Insufficient windows"}
+
+        wr_stdev = statistics.stdev(winrates)
+        wr_mean = statistics.mean(winrates)
+        wr_cv = wr_stdev / wr_mean if wr_mean > 0 else 0
+
+        is_stable = wr_cv < 0.30
+
+        return {
+            "stable": is_stable,
+            "winrate_windows": [round(w, 1) for w in winrates],
+            "mean_winrate": round(wr_mean, 1),
+            "stdev_winrate": round(wr_stdev, 1),
+            "coefficient_of_variation": round(wr_cv, 3),
+            "window_size": window,
+        }
+
     # ── Full Report ──
 
     def full_report(self) -> Dict[str, Any]:
@@ -277,11 +477,18 @@ class TradeAnalytics:
             "sharpe_ratio": self.sharpe_ratio(),
             "max_drawdown": self.max_drawdown(),
             "expected_edge": self.expected_edge(),
+            "expectancy": self.expectancy(),
             "by_regime": self.by_regime(),
             "by_session": self.by_session(),
             "by_asset": self.by_asset(),
             "by_strategy": self.by_strategy(),
             "by_profile": self.by_profile(),
+            "by_hour": self.by_hour(),
             "degradation": self.detect_degradation(),
+            "score_degradation": self.score_degradation(),
             "post_loss": self.post_loss_behavior(),
+            "loss_clustering": self.loss_clustering(),
+            "monte_carlo": self.monte_carlo(),
+            "equity_smoothness": self.equity_smoothness(),
+            "edge_stability": self.edge_stability(),
         }

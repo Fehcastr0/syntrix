@@ -1,4 +1,4 @@
-"""Tests for context/context_gate.py — ContextGate."""
+"""Tests for context/context_gate.py — ContextGate v2 (confidence model)."""
 
 import time
 import unittest
@@ -42,25 +42,23 @@ class TestContextGate(unittest.TestCase):
             min_payout=0.70,
             max_latency_ms=500,
             max_trades_per_hour=10,
-            cooldown_seconds=0,  # disable for testing
+            cooldown_seconds=0,
         )
 
-    def test_low_payout_blocks(self):
+    def test_very_low_payout_reduces_confidence(self):
         candles = make_candles()
         result = self.gate.evaluate(
-            asset="EURUSD", payout=0.50, candles=candles,
+            asset="EURUSD", payout=0.30, candles=candles,
         )
-        self.assertTrue(result["blocked"])
-        self.assertTrue(any("payout" in r.lower() for r in result["block_reasons"]))
+        self.assertLess(result.get("confidence", 1.0), 0.80)
 
-    def test_high_latency_blocks(self):
+    def test_high_latency_reduces_confidence(self):
         candles = make_candles()
         result = self.gate.evaluate(
             asset="EURUSD", payout=0.80, candles=candles,
-            broker_latency_ms=1000,
+            broker_latency_ms=1200,
         )
-        self.assertTrue(result["blocked"])
-        self.assertTrue(any("latency" in r.lower() for r in result["block_reasons"]))
+        self.assertLess(result.get("confidence", 1.0), 0.70)
 
     def test_high_drawdown_blocks(self):
         candles = make_candles()
@@ -87,13 +85,52 @@ class TestContextGate(unittest.TestCase):
         self.assertIn("checks", result)
         self.assertGreater(len(result["checks"]), 5)
 
+    def test_result_has_confidence(self):
+        candles = make_candles()
+        result = self.gate.evaluate(
+            asset="EURUSD", payout=0.80, candles=candles,
+        )
+        self.assertIn("confidence", result)
+        self.assertIn("threshold", result)
+        self.assertIn("trace", result)
+
     def test_record_trade_updates_rate(self):
         self.gate.record_trade()
-        self.gate._last_trade_time = time.time() - 1000  # reset cooldown
+        self.gate._last_trade_time = time.time() - 1000
         candles = make_candles()
         result = self.gate.evaluate(asset="EURUSD", payout=0.80, candles=candles)
         rate_check = [c for c in result["checks"] if c["name"] == "rate_limit"][0]
         self.assertEqual(rate_check["trades_this_hour"], 1)
+
+    def test_otc_asset_skips_session_filter(self):
+        candles = make_candles()
+        result = self.gate.evaluate(
+            asset="EURUSD-OTC", payout=0.80, candles=candles,
+        )
+        session_check = [c for c in result["checks"] if c["name"] == "session"][0]
+        self.assertFalse(session_check["blocked"])
+
+    def test_adaptive_threshold_otc_lower(self):
+        threshold_regular = self.gate.get_adaptive_threshold("EURUSD", "trend", 15)
+        threshold_otc = self.gate.get_adaptive_threshold("EURUSD-OTC", "trend", 15)
+        self.assertLess(threshold_otc, threshold_regular)
+
+    def test_good_conditions_allow(self):
+        candles = make_candles()
+        result = self.gate.evaluate(
+            asset="EURUSD-OTC", payout=0.85, candles=candles,
+            broker_latency_ms=50, broker_healthy=True,
+        )
+        self.assertFalse(result["blocked"])
+
+    def test_trace_in_result(self):
+        candles = make_candles()
+        result = self.gate.evaluate(
+            asset="EURUSD-OTC", payout=0.80, candles=candles,
+        )
+        trace = result.get("trace")
+        self.assertIsNotNone(trace)
+        self.assertGreater(len(trace.stages), 3)
 
 
 class TestSpikeDetector(unittest.TestCase):
@@ -105,7 +142,6 @@ class TestSpikeDetector(unittest.TestCase):
 
     def test_spike_large_candle(self):
         candles = make_candles(30)
-        # Add anomalous candle
         candles.append(Candle(
             timestamp=time.time(),
             open=1.1030,

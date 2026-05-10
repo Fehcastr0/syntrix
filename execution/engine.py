@@ -19,7 +19,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional  # noqa: F811
 
 from brokers.base import BaseBroker, TradeDirection, TradeRequest, TradeResult
 from core.events import EventBus, EventPriority, EventType
@@ -38,6 +38,8 @@ class ExecutionConfig:
     max_latency_ms: float = 500.0
     execution_timeout_sec: float = 30.0
     confirm_execution: bool = True
+    stale_signal_sec: float = 10.0
+    double_order_window_sec: float = 5.0
 
 
 @dataclass
@@ -82,6 +84,7 @@ class ExecutionEngine:
         self._latency_history: List[float] = []
         self._execution_log: List[ExecutionRecord] = []
         self._executing = False
+        self._recent_orders: Dict[str, float] = {}  # asset+direction -> timestamp
 
     @property
     def avg_latency_ms(self) -> float:
@@ -145,12 +148,27 @@ class ExecutionEngine:
 
         with self._lock:
             if self._executing:
-                record.error = "Execution already in progress"
+                record.error = "Execution already in progress (double order protection)"
                 self._emit_error(record, correlation_id)
                 return record
             self._executing = True
 
         try:
+            # Stale signal check
+            signal_age = time.time() - record.timestamp_requested
+            if signal_age > self._config.stale_signal_sec:
+                record.error = f"Stale signal ({signal_age:.1f}s old)"
+                self._emit_error(record, correlation_id)
+                return record
+
+            # Double order protection
+            order_key = f"{asset}_{direction.value}"
+            last_order = self._recent_orders.get(order_key, 0)
+            if (time.time() - last_order) < self._config.double_order_window_sec:
+                record.error = "Double order protection triggered"
+                self._emit_error(record, correlation_id)
+                return record
+            self._recent_orders[order_key] = time.time()
             spacing_ok = self._wait_spacing()
             if not spacing_ok:
                 record.error = "Spacing timeout"
@@ -303,12 +321,30 @@ class ExecutionEngine:
         """Get execution statistics."""
         successful = [r for r in self._execution_log if r.success]
         failed = [r for r in self._execution_log if not r.success]
+
+        # Execution analytics
+        queue_latencies = []
+        for r in successful:
+            if r.timestamp_executed > 0 and r.timestamp_requested > 0:
+                queue_latencies.append((r.timestamp_executed - r.timestamp_requested) * 1000)
+
+        error_breakdown: Dict[str, int] = {}
+        for r in failed:
+            key = r.error.split("(")[0].strip() if r.error else "unknown"
+            error_breakdown[key] = error_breakdown.get(key, 0) + 1
+
         return {
             "total_executions": len(self._execution_log),
             "successful": len(successful),
             "failed": len(failed),
+            "success_rate": round(len(successful) / max(1, len(self._execution_log)) * 100, 1),
             "avg_latency_ms": round(self.avg_latency_ms, 1),
             "avg_jitter_ms": round(
                 sum(r.jitter_ms for r in successful) / len(successful) if successful else 0, 1
             ),
+            "avg_queue_latency_ms": round(
+                sum(queue_latencies) / len(queue_latencies) if queue_latencies else 0, 1
+            ),
+            "max_latency_ms": round(max(self._latency_history) if self._latency_history else 0, 1),
+            "error_breakdown": error_breakdown,
         }

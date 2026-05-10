@@ -195,6 +195,10 @@ class BaseBroker(ABC):
         """Check the result of a previously executed trade."""
         ...
 
+    def get_all_open_assets(self) -> List[str]:
+        """Get all currently open/tradeable assets. Override in adapter."""
+        return []
+
     def health_check(self) -> HealthStatus:
         """Get broker health status."""
         return HealthStatus(

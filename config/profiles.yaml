@@ -141,9 +141,33 @@ defaults:
   profile: leve
   mode: demo  # dry-run / demo / live
   assets:
+    # OTC (always available)
     - EURUSD-OTC
     - GBPUSD-OTC
     - EURJPY-OTC
+    - USDJPY-OTC
+    - AUDCAD-OTC
+    - AUDUSD-OTC
+    - EURGBP-OTC
+    - GBPJPY-OTC
+    - NZDUSD-OTC
+    - USDCAD-OTC
+    - USDCHF-OTC
+    - EURAUD-OTC
+    - GBPAUD-OTC
+    - CADJPY-OTC
+    - CHFJPY-OTC
+    # Forex regular (session-dependent)
+    - EURUSD
+    - GBPUSD
+    - USDJPY
+    - AUDUSD
+    - EURJPY
+    - GBPJPY
+    - USDCAD
+    - USDCHF
+    - EURGBP
+    - NZDUSD
   broker:
     name: iqoption
     practice: true

@@ -1,9 +1,9 @@
 ================================================================
-  SYNTRIX — Sistema Operacional Quantitativo Modular
-  Orientado a Eventos para Trading
+  SYNTRIX v2.0 — Motor Probabilistico Quantitativo Adaptativo
+  Sistema Operacional Modular Orientado a Eventos para Trading
 ================================================================
-  Versao: 1.4.0
-  Ultima atualizacao: 2026-05-09 21:00 UTC
+  Versao: 2.0.0
+  Ultima atualizacao: 2026-05-09 20:37 UTC
   Repositorio: https://github.com/Fehcastr0/syntrix
   PR: https://github.com/Fehcastr0/syntrix/pull/1
 ================================================================
@@ -13,22 +13,34 @@
   1. O QUE E O SYNTRIX
 ================================================================
 
-O Syntrix NAO e um bot de trading simples. E um sistema operacional
-quantitativo modular orientado a eventos, com foco em:
+O Syntrix NAO e um bot de trading simples. E um MOTOR PROBABILISTICO
+QUANTITATIVO ADAPTATIVO orientado a eventos, com foco em:
 
-- Contexto: so opera quando o contexto e favoravel
-- Filtragem probabilistica: bloqueia operacoes de baixa qualidade
+- Motor de decisao: compara oportunidades e seleciona a melhor
+- Multi-asset scanning: escaneia dezenas de ativos simultaneamente
+- Meta scoring: modelo multiplicativo de confianca probabilistica
+- Contexto inteligente: hard blocks vs soft blocks, confidence model
+- Thresholds adaptativos: ajustam por horario, regime, ativo, OTC
+- Asset DNA: perfil comportamental por ativo com auto-ajuste
+- Market phase detection: 10 fases granulares de mercado
+- Strategy health: deteccao de degradacao de edge, pesos adaptativos
+- Microestrutura: analise de qualidade de price action
 - Gestao de risco: stops, drawdown, cooldown, safe mode
-- Observabilidade: logs estruturados, metricas, tracing
+- Single position execution: apenas UMA posicao aberta por vez
+- Observabilidade total: decision trace, diagnostic mode, block reasons
 - Replay: reproducao completa de sessoes via event sourcing
-- Analytics: metricas detalhadas de performance
+- Analytics profissional: monte carlo, equity smoothness, edge stability
 - Arquitetura desacoplada: modulos independentes via EventBus
 
 Filosofia central:
 "Selecionar melhor e mais importante do que prever melhor."
 
-O sistema opera pouco, evita contexto ruim, prioriza sobrevivencia
-estatistica e registra tudo para auditoria.
+O Syntrix NAO age como "sistema que procura sinais".
+Ele age como "motor probabilistico que procura assimetrias estatisticas".
+
+Pipeline v2.0:
+MULTI-ASSET SCAN -> RAW SIGNALS -> META SCORE -> OPPORTUNITY RANKING
+-> DECISION ENGINE -> RISK ENGINE -> EXECUTION -> RESULT
 
 
 ================================================================
@@ -54,15 +66,16 @@ COMO RODAR:
   python login.py              Abre tela de login IQ Option
   python main.py               Roda com interface Tkinter
   python main.py --headless    Roda sem interface (so terminal)
+  python main.py --diagnostic  Modo diagnostico (mostra TUDO)
   python main.py --interval 30 Muda intervalo de scan (padrao 60s)
   python main.py --profile moderado   Usa perfil moderado
 
 TESTES:
-  python -m pytest tests/ -v   Roda os 72 testes unitarios
+  python -m pytest tests/ -v   Roda os 77 testes unitarios
 
 
 ================================================================
-  3. ESTRUTURA DE MODULOS (51 arquivos, ~8.170 linhas)
+  3. ESTRUTURA DE MODULOS (~75 arquivos, ~12.000+ linhas)
 ================================================================
 
 projeto/
@@ -74,17 +87,59 @@ projeto/
 |   |-- states.py              Maquina de estados (8 estados operacionais)
 |
 |-- brokers/                   ABSTRACOES DE BROKER
-|   |-- base.py                Interface abstrata (connect, execute_trade, etc)
+|   |-- base.py                Interface abstrata (connect, execute_trade,
+|   |                          get_all_open_assets, health_check, etc)
 |   |-- iqoption/
 |       |-- adapter.py         Adaptador IQ Option (iqbroker/iqoptionapi)
 |                              Reconnect, heartbeat, health check, latencia
 |
 |-- context/                   MOTOR DE CONTEXTO
-|   |-- context_gate.py        Gate central — 11 verificacoes, padrao BLOCK
+|   |-- context_gate.py        Gate central — 11 verificacoes + confidence model
+|   |                          Hard blocks vs soft blocks, threshold adaptativo
+|   |-- decision_trace.py      [v2.0] Decision Trace pipeline completo
+|   |                          8 etapas: SCAN->REGIME->STRATEGY->SCORE->
+|   |                          CONTEXT->RISK->EXECUTION->RESULT
+|   |                          TraceCollector com block_rate_by_reason()
 |   |-- market_regime.py       Detector de regime (trend, range, volatility)
+|   |-- market_phase.py        [v2.0] 10 fases granulares de mercado:
+|   |                          ACCUMULATION, EXPANSION, DISTRIBUTION,
+|   |                          EXHAUSTION, PANIC, COMPRESSION, FAKE_BREAKOUT,
+|   |                          LOW_LIQUIDITY, OTC_NOISE, TREND, RANGE
+|   |-- microstructure.py      [v2.0] Analise de microestrutura de price action:
+|   |                          wick ratio, candle efficiency, compression,
+|   |                          impulsiveness, ATR expansion, noise, fake breakouts
+|   |-- otc_analyzer.py        [v2.0] OTC Behavior Analyzer:
+|   |                          spikes artificiais, fake breakout, reversao
+|   |                          sintetica, wick anomalo, compressao falsa,
+|   |                          otc_quality_score por ativo
 |   |-- session_filter.py      Filtro de sessao (London, NY, overlap, OTC)
 |   |-- news_filter.py         Filtro de noticias (bloqueio proximo de evento)
 |   |-- spike_detector.py      Detector de spikes (candles anomalos)
+|
+|-- decision/                  [v2.0] MOTOR DE DECISAO
+|   |-- engine.py              DecisionEngine: compara oportunidades,
+|   |                          pondera contexto, aplica pesos adaptativos,
+|   |                          resolve conflitos, escolhe melhor trade,
+|   |                          bloqueia sinais ruins, prioriza ativos fortes
+|   |                          Ranking global, consensus bonus, TOP 1 selection
+|
+|-- scanner/                   [v2.0] MULTI-ASSET SCANNER
+|   |-- asset_registry.py      Registro de 25 ativos (15 OTC + 10 Forex)
+|   |                          Prioridade dinamica, discovery automatico,
+|   |                          tracking de qualidade/winrate/signal_rate
+|   |-- quality_analyzer.py    Analise de qualidade de ativos:
+|   |                          payout, estabilidade, spikes, spread, ruido,
+|   |                          volatilidade, consistencia -> quality_score
+|   |-- multi_scanner.py       Scanner paralelo de multiplos ativos
+|   |                          TradeCandidate generation, global ranking
+|
+|-- assets/                    [v2.0] ASSET DNA SYSTEM
+|   |-- asset_dna.py           Perfil comportamental por ativo:
+|   |                          volatilidade, payout, melhores/piores horas,
+|   |                          melhores/piores estrategias, spike frequency,
+|   |                          OTC noise level, stability score
+|   |                          Parametros adaptativos: threshold_adjustment,
+|   |                          priority, scan_interval_factor
 |
 |-- risk/                      MOTOR DE RISCO
 |   |-- risk_engine.py         Stop gain/loss, drawdown, cooldown, safe mode,
@@ -92,7 +147,13 @@ projeto/
 |
 |-- execution/                 MOTOR DE EXECUCAO
 |   |-- engine.py              Timing, jitter controlado, rate limiting,
-|                              retry seguro, controle de latencia
+|   |                          retry inteligente, stale signal protection,
+|   |                          duplicate order protection, execution watchdog,
+|   |                          execution analytics (latencia, throughput)
+|   |-- position_lock.py       [v2.0] PositionLockManager thread-safe:
+|   |                          5 estados (NO_POSITION, EXECUTING, OPEN,
+|   |                          CLOSING, COOLDOWN), lock global, previne
+|   |                          double orders, race conditions, overtrading
 |
 |-- strategies/                ESTRATEGIAS DE TRADING
 |   |-- base.py                Interface base para estrategias
@@ -100,15 +161,36 @@ projeto/
 |   |-- range_reversal.py      Estrategia de reversao em range
 |   |-- breakout.py            Estrategia de rompimento
 |   |-- momentum.py            Estrategia de momentum
-|   |-- scoring.py             Motor de scoring contextual
+|   |-- scoring.py             Motor de scoring contextual (ensemble)
+|   |-- meta_scoring.py        [v2.0] Meta Scoring Engine:
+|   |                          confidence_final = signal_score x regime_factor
+|   |                          x payout_factor x asset_quality_factor
+|   |                          x volatility_factor x latency_factor
+|   |                          x hour_factor x consensus_factor x history_factor
+|   |                          Dynamic thresholds por horario/regime/ativo/OTC
+|   |-- health_monitor.py      [v2.0] Strategy Health Monitor:
+|   |                          Edge decay detection, sharpe decay, winrate rolling,
+|   |                          auto-adjust strategy weights (0.3 a 1.5)
 |
 |-- indicators/                INDICADORES TECNICOS (puro Python)
 |   |-- technical.py           SMA, EMA, RSI, Bollinger Bands, ATR,
 |                              MACD, Stochastic, ADX
 |
-|-- analytics/                 ANALYTICS E METRICAS
+|-- analytics/                 ANALYTICS PROFISSIONAL
 |   |-- trade_analytics.py     Winrate, Sharpe, drawdown, profit factor,
-|                              edge, performance por regime/sessao/ativo
+|   |                          edge, performance por regime/sessao/ativo
+|   |                          [v2.0] Monte Carlo (1000 simulacoes),
+|   |                          equity smoothness (R2 + volatilidade),
+|   |                          edge stability (rolling window)
+|
+|-- features/                  [v2.0] FEATURE STORE
+|   |-- feature_store.py       Registro completo de features por decisao:
+|   |                          indicadores, contexto, regime, market_phase,
+|   |                          payout, score, meta_score, ativo, volatilidade,
+|   |                          latencia, horario, resultado, execution metrics,
+|   |                          rank_score, rank_position, total_candidates,
+|   |                          strategy_weight, strategy_health
+|   |                          Base futura para ML/meta-learning
 |
 |-- replay/                    REPLAY ENGINE
 |   |-- engine.py              Replay por sessao, por trade, reconstrucao
@@ -130,13 +212,14 @@ projeto/
 |
 |-- config/                    CONFIGURACAO
 |   |-- profiles.yaml          Perfis de risco (leve, moderado, agressivo, extremo)
+|   |                          25 ativos configurados (15 OTC + 10 Forex)
 |   |-- loader.py              Loader de configuracao YAML
 |
-|-- tests/                     TESTES UNITARIOS (72 testes)
+|-- tests/                     TESTES UNITARIOS (77 testes)
 |   |-- test_event_bus.py      Testes do EventBus
 |   |-- test_state_machine.py  Testes da maquina de estados
 |   |-- test_risk_engine.py    Testes do motor de risco
-|   |-- test_context_gate.py   Testes do context gate
+|   |-- test_context_gate.py   Testes do context gate + confidence model
 |   |-- test_broker.py         Testes do broker abstrato
 |   |-- test_replay.py         Testes do replay engine
 |
@@ -148,15 +231,18 @@ projeto/
 |-- data/                      DADOS (gerado automaticamente)
 |   |-- trade_logs/            Logs de trades (JSONL diario)
 |   |-- syntrix.db             Banco de eventos SQLite
+|   |-- asset_dna.json         [v2.0] DNA comportamental dos ativos
+|   |-- features/              [v2.0] Feature store (CSV diario)
 |
 |-- docs/                      DOCUMENTACAO
 |   |-- ARCHITECTURE.md        Documentacao da arquitetura
 |
 |-- login.py                   App de login IQ Option
 |-- start.py                   Launcher principal
-|-- main.py                    Entry point do sistema
+|-- main.py                    Entry point v2.0 (pipeline completo)
 |-- iq_api.py                  Loader centralizado da API
 |-- instalar.bat               Instalador de dependencias (Windows)
+|-- SYNTRIX_COMPLETO.txt       Este arquivo (documentacao completa)
 |-- .env                       Credenciais (NAO vai pro git)
 |-- .gitignore                 Arquivos ignorados pelo git
 |-- requirements.txt           Dependencias Python
@@ -181,30 +267,55 @@ Fluxo normal:
 
 
 ================================================================
-  5. CONTEXT GATE — 11 VERIFICACOES
+  5. CONTEXT GATE v2.0 — CONFIDENCE MODEL
 ================================================================
 
-O ContextGate e o filtro central. Padrao: BLOCK.
-So libera quando TODAS as verificacoes passam.
+O ContextGate usa modelo de confianca probabilistica (v2.0).
+NAO e mais binario ALLOW/BLOCK.
 
-  1. Payout minimo         Payout do ativo >= threshold (65% no leve)
-  2. Sessao valida          Horario dentro de sessao ativa
-                            OTC: sempre permitido (24h)
-                            Regular: London (07-16), NY (13-22), Overlap (13-16)
-  3. Filtro de noticias     Bloqueia proximo de noticias economicas
-  4. Regime de mercado      Bloqueia regimes instáveis
+MODELO:
+  - HARD BLOCKS: bloqueio imediato, confidence = 0
+    broker offline, websocket morto, drawdown critico, safe mode
+  - SOFT BLOCKS: reduzem confianca (multiplicadores 0.0-1.5)
+    volatilidade alta, score marginal, payout medio,
+    latencia moderada, sessao fraca
+  - CONFIDENCE MODIFIERS: cada filtro retorna modifier + severity
+  - THRESHOLD ADAPTATIVO: ajusta por regime, horario, ativo, OTC
+
+  11 Verificacoes:
+  1. Payout minimo         Payout >= threshold (65% no leve)
+  2. Sessao valida          OTC: sempre permitido (24h)
+  3. Filtro de noticias     Bloqueia proximo de noticias
+  4. Regime de mercado      Bloqueia regimes instaveis
   5. Detector de spikes     Bloqueia candles anomalos
-  6. Latencia do broker     Bloqueia se latencia > threshold
-  7. Cooldown               Respeita tempo minimo entre trades
+  6. Latencia do broker     Reduz confidence se alta
+  7. Cooldown               Tempo minimo entre trades
   8. Rate limit             Max trades por hora
-  9. Drawdown               Bloqueia se drawdown > threshold
- 10. Saude do broker        Verifica conexao ativa
- 11. Checks customizados    Extensivel para novas verificacoes
+  9. Drawdown               Hard block se > threshold
+ 10. Saude do broker        Hard block se offline
+ 11. OTC Behavior           Analisa qualidade OTC
 
-Retornos possiveis:
-  ALLOW   — todas as verificacoes passaram
-  CAUTION — avisos mas sem bloqueio duro
-  BLOCK   — uma ou mais verificacoes falharam
+BLOCK REASONS PADRONIZADOS:
+  LOW_SCORE, LOW_PAYOUT, REGIME_UNSTABLE, OTC_NOISE,
+  SPIKE_DETECTED, SAFE_MODE, LATENCY_HIGH, COOLDOWN,
+  DRAWNDOWN_LIMIT, BROKER_UNHEALTHY, SESSION_BLOCKED,
+  MAX_TRADES
+
+DECISION TRACE:
+  Toda decisao gera trace completo com 8 etapas:
+  SCAN -> REGIME -> STRATEGY -> SCORE -> CONTEXT -> RISK -> EXECUTION -> RESULT
+  Cada etapa registra: timestamp, duracao, score, confidence,
+  threshold, motivo, decisao, correlation_id
+
+DIAGNOSTIC MODE (python main.py --diagnostic):
+  ASSET: EURUSD-OTC
+  PHASE: EXPANSION
+  REGIME: TREND
+  SIGNAL: CALL
+  BASE SCORE: 0.71
+  META SCORE: 0.66
+  FINAL CONFIDENCE: 0.61
+  BLOCKED BY: LOW_PAYOUT
 
 
 ================================================================
@@ -594,22 +705,166 @@ Instalacao automatica: instalar.bat ou via auto-install nos apps.
   - config/loader.py le IQ_AMOUNT e IQ_DURATION do .env
   - Valores do .env tem prioridade sobre profiles.yaml
 
+[2026-05-09 20:37 UTC] v2.0.0 — UPGRADE QUANTITATIVO ADAPTATIVO (FASES 1-12)
+  Motor probabilistico adaptativo completo.
+  De "sistema que procura sinais" para "motor que procura assimetrias".
+
+  ARQUIVOS NOVOS (11 modulos):
+    decision/engine.py           Decision Engine (ranking + selecao TOP 1)
+    decision/__init__.py
+    strategies/meta_scoring.py   Meta Scoring Engine (modelo multiplicativo)
+    strategies/health_monitor.py Strategy Health Monitor (edge decay)
+    context/decision_trace.py    Decision Trace pipeline (8 etapas)
+    context/market_phase.py      Market Phase Detector (10 fases)
+    context/microstructure.py    Microstructure Engine (price action quality)
+    context/otc_analyzer.py      OTC Behavior Analyzer (quality score)
+    assets/asset_dna.py          Asset DNA System (perfil por ativo)
+    assets/__init__.py
+    execution/position_lock.py   Position Lock Manager (single position)
+    scanner/asset_registry.py    Asset Registry (25 ativos, discovery)
+    scanner/quality_analyzer.py  Asset Quality Analyzer (weighted scoring)
+    scanner/multi_scanner.py     Multi-Asset Scanner (parallel scan)
+    scanner/__init__.py
+    features/feature_store.py    Feature Store (base para ML futuro)
+    features/__init__.py
+
+  ARQUIVOS MODIFICADOS (9 arquivos):
+    main.py                      Pipeline v2.0 completo integrado
+    context/context_gate.py      Confidence model, hard/soft blocks,
+                                 threshold adaptativo, block reasons
+    execution/engine.py          Execution analytics expandido,
+                                 stale signal/double order protection
+    analytics/trade_analytics.py Monte Carlo, equity smoothness,
+                                 edge stability adicionados
+    config/profiles.yaml         25 ativos (era 3), thresholds relaxados
+    brokers/base.py              get_all_open_assets() adicionado
+    tests/test_context_gate.py   Testes atualizados para confidence model
+                                 (de 72 para 77 testes, todos passando)
+
+  FUNCIONALIDADES POR FASE:
+
+  FASE 1 — DECISION ENGINE:
+    - DecisionEngine: compara oportunidades globalmente
+    - Ranking por meta_score, payout, qualidade, contexto
+    - Consensus bonus quando multiplas estrategias concordam
+    - Selecao TOP 1 (apenas o melhor trade)
+    - Block reasons padronizados
+    - Correlation ID em toda decisao
+
+  FASE 2 — META SCORING ENGINE:
+    - Modelo multiplicativo probabilistico:
+      confidence = signal x regime x payout x asset_quality
+                  x volatility x latency x hour x consensus x history
+    - Dynamic thresholds por horario, regime, ativo, OTC
+    - Fatores detalhados por decisao
+    - Breakdown completo de cada fator
+
+  FASE 3 — MARKET PHASE DETECTION:
+    - 10 fases granulares: ACCUMULATION, EXPANSION, DISTRIBUTION,
+      EXHAUSTION, PANIC, COMPRESSION, FAKE_BREAKOUT,
+      LOW_LIQUIDITY, OTC_NOISE, TREND, RANGE
+    - Deteccao multi-step: volatility ratio, momentum, range, trend
+    - PhaseAnalysis com confianca e metricas de suporte
+
+  FASE 4 — OTC INTELLIGENCE:
+    - OTCBehaviorAnalyzer: spikes artificiais, fake breakout,
+      reversao sintetica, wick anomalo, compressao falsa
+    - otc_quality_score por ativo
+    - Integrado ao ContextGate e Meta Scoring
+
+  FASE 5 — ASSET DNA SYSTEM:
+    - Perfil comportamental por ativo
+    - Tracking: volatilidade, payout, melhores/piores horas,
+      melhores/piores estrategias, spike frequency, OTC noise
+    - Parametros adaptativos: threshold_adjustment, priority,
+      scan_interval_factor
+    - Persistencia em asset_dna.json
+
+  FASE 6 — MULTI-ASSET OPPORTUNITY ENGINE:
+    - 25 ativos monitorados (15 OTC + 10 Forex)
+    - AssetRegistry com prioridade dinamica
+    - AssetQualityAnalyzer: payout, estabilidade, spikes,
+      spread, ruido, volatilidade, consistencia
+    - Discovery automatico via broker.get_all_open_assets()
+    - Ranking global de candidatos
+    - PositionLockManager: apenas UMA posicao por vez
+      5 estados: NO_POSITION, EXECUTING, OPEN, CLOSING, COOLDOWN
+      Thread-safe, previne race conditions
+
+  FASE 7 — STRATEGY HEALTH ENGINE:
+    - Edge decay detection: degradacao de eficiencia
+    - Sharpe rolling, winrate rolling, expectancy
+    - Auto-adjust strategy weights: 0.3 (degraded) a 1.5 (excellent)
+    - Warnings de degradacao
+
+  FASE 8 — MICROSTRUCTURE ENGINE:
+    - Analise de microestrutura de price action
+    - Metricas: wick ratio, candle efficiency, compression,
+      impulsiveness, ATR expansion, noise, fake breakouts
+    - quality_score (0-1) integrado ao ranking
+
+  FASE 9 — EXECUTION INTELLIGENCE:
+    - Execution analytics: websocket latency, queue latency,
+      candle age, broker lag
+    - Retry inteligente, stale signal protection
+    - Duplicate order protection
+    - Execution watchdog, adaptive timing
+    - Metricas de sucesso/erro por tipo
+
+  FASE 10 — OBSERVABILIDADE TOTAL:
+    - Decision Trace pipeline completo (8 etapas)
+    - Diagnostic mode: python main.py --diagnostic
+    - Block reasons padronizados com enum
+    - TraceCollector: allow_rate, avg_confidence,
+      block_rate_by_reason
+    - Correlation IDs unicos e rastreaveis
+
+  FASE 11 — FEATURE STORE:
+    - FeatureRecord com 25+ campos
+    - Registro de cada decisao (permitida ou bloqueada)
+    - Campos v2.0: market_phase, meta_score, asset_quality,
+      microstructure_quality, rank_score, rank_position,
+      total_candidates, strategy_weight, strategy_health,
+      execution_latency_ms
+    - Base para ML/meta-learning futuro
+
+  FASE 12 — ANALYTICS PROFISSIONAL:
+    - Monte Carlo: 1000 simulacoes, 100-trade draws
+    - Equity smoothness: R2 + volatilidade de retornos
+    - Edge stability: rolling window winrate analysis
+    - Integrado ao full_report()
+
+  TESTES: 77 testes unitarios passando (era 72)
+    - 5 novos testes para confidence model
+    - 14 testes atualizados para nova API
+    - Zero falhas
+
 
 ================================================================
   20. PROXIMAS FUNCIONALIDADES PLANEJADAS
 ================================================================
 
-  - [ ] Mais ativos (GBPUSD-OTC, EURJPY-OTC, USDJPY-OTC, etc)
+  - [x] Mais ativos (25 ativos: 15 OTC + 10 Forex) — FEITO v2.0
+  - [x] Multi-asset scanning — FEITO v2.0
+  - [x] Decision engine com ranking global — FEITO v2.0
+  - [x] Meta scoring probabilistico — FEITO v2.0
+  - [x] Thresholds adaptativos — FEITO v2.0
+  - [x] Asset DNA (perfil por ativo) — FEITO v2.0
+  - [x] Strategy health monitoring — FEITO v2.0
+  - [x] Microstructure analysis — FEITO v2.0
+  - [x] Feature store para ML futuro — FEITO v2.0
+  - [x] Monte Carlo / equity smoothness — FEITO v2.0
   - [ ] Martingale opcional (com limites de seguranca)
   - [ ] Notificacoes via Telegram
   - [ ] Historico visual de trades
   - [ ] Backtesting com dados historicos
   - [ ] Suporte a outros brokers (Quotex, Pocket Option)
   - [ ] Dashboard web leve
+  - [ ] ML/meta-learning com feature store
   - [ ] Auto-ajuste de perfil baseado em performance
 
 
 ================================================================
   FIM DO DOCUMENTO
-  Atualizado em: 2026-05-09 21:00 UTC
+  Atualizado em: 2026-05-09 20:37 UTC
 ================================================================
