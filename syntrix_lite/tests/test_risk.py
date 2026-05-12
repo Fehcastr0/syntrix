@@ -94,3 +94,37 @@ class TestRiskManager:
         assert stats["losses"] == 1
         assert stats["pnl"] == 3.0
         assert stats["winrate"] == 50.0
+
+    def test_profit_target(self):
+        rm = RiskManager(
+            config=RiskConfig(stop_gain=200.0, cooldown_after_trade_sec=0),
+            profit_target=10.0,
+        )
+        rm.record_result(5.0)
+        ok, _ = rm.can_trade()
+        assert ok  # 5 < 10
+        rm.record_result(6.0)
+        ok, reason = rm.can_trade()
+        assert not ok
+        assert "PROFIT_TARGET" in reason
+
+    def test_profit_target_progress(self):
+        rm = RiskManager(profit_target=100.0)
+        assert rm.target_progress() == 0.0
+        rm.pnl = 50.0
+        assert rm.target_progress() == 0.5
+        rm.pnl = 100.0
+        assert rm.target_progress() == 1.0
+
+    def test_no_target(self):
+        rm = RiskManager()
+        assert rm.target_progress() is None
+        stats = rm.get_stats()
+        assert "profit_target" not in stats
+
+    def test_target_stats(self):
+        rm = RiskManager(profit_target=100.0)
+        rm.record_result(25.0)
+        stats = rm.get_stats()
+        assert stats["profit_target"] == 100.0
+        assert stats["target_progress"] == 25.0

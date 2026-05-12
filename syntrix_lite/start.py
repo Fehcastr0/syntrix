@@ -158,8 +158,8 @@ class SyntrixLiteLauncher:
 
         right = ttk.Frame(row, style="Card.TFrame")
         right.pack(side="right", expand=True, fill="x", padx=(5, 0))
-        ttk.Label(right, text="Duração (s):", style="Info.TLabel").pack(anchor="w")
-        self.duration_var = tk.StringVar(value="60")
+        ttk.Label(right, text="Duração (min):", style="Info.TLabel").pack(anchor="w")
+        self.duration_var = tk.StringVar(value="1")
         tk.Entry(right, textvariable=self.duration_var, font=("Segoe UI", 10),
                  bg="#1a1a2e", fg="#ffffff", insertbackground="#ffffff",
                  relief="flat", bd=5, width=10).pack(fill="x")
@@ -171,6 +171,16 @@ class SyntrixLiteLauncher:
         self.interval_var = tk.StringVar(value="30")
         tk.Entry(row2, textvariable=self.interval_var, font=("Segoe UI", 10),
                  bg="#1a1a2e", fg="#ffffff", insertbackground="#ffffff",
+                 relief="flat", bd=5, width=10).pack(anchor="w")
+
+        # Target row
+        row3 = ttk.Frame(config_card, style="Card.TFrame")
+        row3.pack(fill="x", pady=(0, 5))
+        ttk.Label(row3, text="Meta de Lucro ($) (0 = sem meta):",
+                  style="Info.TLabel").pack(anchor="w")
+        self.target_var = tk.StringVar(value="0")
+        tk.Entry(row3, textvariable=self.target_var, font=("Segoe UI", 10),
+                 bg="#1a1a2e", fg="#00d4aa", insertbackground="#00d4aa",
                  relief="flat", bd=5, width=10).pack(anchor="w")
 
         # Force entry checkbox
@@ -221,8 +231,9 @@ class SyntrixLiteLauncher:
         self.email_var.set(env.get("IQ_EMAIL", ""))
         self.password_var.set(env.get("IQ_PASSWORD", ""))
         self.amount_var.set(env.get("IQ_AMOUNT", "2.0"))
-        self.duration_var.set(env.get("IQ_DURATION", "60"))
+        self.duration_var.set(env.get("IQ_DURATION", "1"))
         self.interval_var.set(env.get("SCAN_INTERVAL", "30"))
+        self.target_var.set(env.get("PROFIT_TARGET", "0"))
 
     def _save_config(self) -> None:
         env = load_env()
@@ -231,6 +242,11 @@ class SyntrixLiteLauncher:
         env["IQ_AMOUNT"] = self.amount_var.get().strip()
         env["IQ_DURATION"] = self.duration_var.get().strip()
         env["SCAN_INTERVAL"] = self.interval_var.get().strip()
+        target_val = self.target_var.get().strip() or "0"
+        if float(target_val) > 0:
+            env["PROFIT_TARGET"] = target_val
+        elif "PROFIT_TARGET" in env:
+            del env["PROFIT_TARGET"]
         if not env.get("IQ_PRACTICE"):
             env["IQ_PRACTICE"] = "true"
         if not env.get("STOP_GAIN"):
@@ -261,7 +277,8 @@ class SyntrixLiteLauncher:
 
         interval = self.interval_var.get().strip() or "30"
         amount = self.amount_var.get().strip() or "2.0"
-        duration = self.duration_var.get().strip() or "60"
+        duration = self.duration_var.get().strip() or "1"
+        target = self.target_var.get().strip() or "0"
 
         cmd = [
             sys.executable, str(PROJECT_DIR / "main.py"),
@@ -273,6 +290,8 @@ class SyntrixLiteLauncher:
             cmd.append("--shadow")
         if self.force_var.get():
             cmd.append("--force")
+        if float(target) > 0:
+            cmd.extend(["--target", target])
 
         mode = "SHADOW" if shadow else "LIVE"
         self.status_var.set(f"Rodando ({mode})...")

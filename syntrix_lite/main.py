@@ -120,14 +120,16 @@ class SyntrixLite:
         shadow: bool = False,
         force: bool = False,
         amount: float = 2.0,
-        duration: int = 60,
+        duration: int = 1,
         min_payout: float = MIN_PAYOUT,
+        target: float | None = None,
     ) -> None:
         self._shadow = shadow
         self._force = force
         self._amount = amount
         self._duration = duration
         self._min_payout = min_payout
+        self._target = target
         self._running = False
 
         # Score threshold
@@ -140,15 +142,23 @@ class SyntrixLite:
             practice=os.environ.get("IQ_PRACTICE", "true").lower() == "true",
         )
 
+        # If target set and higher than stop_gain, raise stop_gain
+        stop_gain = float(os.environ.get("STOP_GAIN", "30"))
+        if target is not None and target > stop_gain:
+            stop_gain = target + 10  # allow room above target
+
         # Risk — relaxed cooldowns
-        self._risk = RiskManager(RiskConfig(
-            stop_gain=float(os.environ.get("STOP_GAIN", "30")),
-            stop_loss=float(os.environ.get("STOP_LOSS", "-15")),
-            max_consecutive_losses=5,
-            cooldown_after_loss_sec=COOLDOWN_LOSS,
-            cooldown_after_trade_sec=COOLDOWN_TRADE,
-            max_trades_per_session=100,
-        ))
+        self._risk = RiskManager(
+            config=RiskConfig(
+                stop_gain=stop_gain,
+                stop_loss=float(os.environ.get("STOP_LOSS", "-15")),
+                max_consecutive_losses=5,
+                cooldown_after_loss_sec=COOLDOWN_LOSS,
+                cooldown_after_trade_sec=COOLDOWN_TRADE,
+                max_trades_per_session=500,
+            ),
+            profit_target=target,
+        )
 
         # Analytics
         self._analytics = Analytics()
@@ -170,13 +180,17 @@ class SyntrixLite:
         mode = "SHADOW" if self._shadow else "LIVE"
         if self._force:
             mode += " + FORCE_ENTRY"
+        if self._target is not None:
+            mode += f" + TARGET ${self._target:.2f}"
 
         logger.info("=" * 50)
         logger.info("  SYNTRIX LITE")
         logger.info("  Mode: %s", mode)
-        logger.info("  Amount: $%.2f | Duration: %ds", self._amount, self._duration)
+        logger.info("  Amount: $%.2f | Duration: %dmin (M%d)", self._amount, self._duration, self._duration)
         logger.info("  Min Score: %.2f | Min Payout: %.0f%%",
                      self._min_score, self._min_payout * 100)
+        if self._target is not None:
+            logger.info("  META DE LUCRO: $%.2f", self._target)
         logger.info("  Assets: %d", len(self._assets))
         logger.info("=" * 50)
 
@@ -194,16 +208,14 @@ class SyntrixLite:
         except Exception:
             logger.warning("Could not get balance: %s", traceback.format_exc())
 
-        # Discover open assets
+        # Discover open assets — keep only our DEFAULT list that are open
+        # Don't add ALL 159 OTC assets (would take 3+ min per cycle)
         try:
             open_assets = self._broker.get_open_assets()
             if open_assets:
                 self._assets = [a for a in self._assets if a in open_assets]
-                for a in open_assets:
-                    if a.endswith("-OTC") and a not in self._assets:
-                        self._assets.append(a)
                 logger.info("Open assets: %d — %s", len(self._assets),
-                           ", ".join(self._assets[:10]))
+                           ", ".join(self._assets))
             else:
                 logger.warning("Could not discover open assets, using defaults")
         except Exception:
@@ -460,11 +472,27 @@ class SyntrixLite:
                 # Print stats every cycle
                 stats = self._risk.get_stats()
                 if stats["total_trades"] > 0:
+                    target_info = ""
+                    if self._target is not None:
+                        progress = stats.get("target_progress", 0)
+                        target_info = f" | Meta: {progress:.0f}% (${stats['pnl']:.2f}/${self._target:.2f})"
                     logger.info(
-                        "[STATS] trades=%d WR=%.0f%% PnL=$%.2f streak=%d",
+                        "[STATS] trades=%d WR=%.0f%% PnL=$%.2f streak=%d%s",
                         stats["total_trades"], stats["winrate"],
                         stats["pnl"], stats["consecutive_losses"],
+                        target_info,
                     )
+
+                # Check if profit target reached
+                if self._risk.locked and self._risk.lock_reason == "PROFIT_TARGET":
+                    logger.info("")
+                    logger.info("=" * 50)
+                    logger.info("  META DE LUCRO ATINGIDA!")
+                    logger.info("  Target: $%.2f | PnL: $%.2f", self._target, self._risk.pnl)
+                    logger.info("  Trades: %d | WR: %.0f%%",
+                                stats["total_trades"], stats["winrate"])
+                    logger.info("=" * 50)
+                    break
 
                 time.sleep(interval)
         except KeyboardInterrupt:
@@ -491,8 +519,12 @@ class SyntrixLite:
 
         # Risk summary
         stats = self._risk.get_stats()
+        target_str = ""
+        if self._target is not None:
+            progress = stats.get("target_progress", 0)
+            target_str = f" | Meta: ${self._target:.2f} ({progress:.0f}%)"
         print(f"\n  Risk: PnL=${stats['pnl']} | Trades={stats['total_trades']} | "
-              f"WR={stats['winrate']}% | Locked={stats['locked']}")
+              f"WR={stats['winrate']}% | Locked={stats['locked']}{target_str}")
 
         self._broker.disconnect()
         logger.info("Syntrix Lite stopped")
@@ -508,10 +540,12 @@ def main() -> None:
                         help="Scan interval in seconds (default 30)")
     parser.add_argument("--amount", type=float, default=2.0,
                         help="Trade amount in $ (default 2.0)")
-    parser.add_argument("--duration", type=int, default=60,
-                        help="Trade duration in seconds (default 60)")
+    parser.add_argument("--duration", type=int, default=1,
+                        help="Trade duration in MINUTES (default 1 = M1)")
     parser.add_argument("--min-payout", type=float, default=MIN_PAYOUT,
                         help=f"Minimum payout to accept (default {MIN_PAYOUT})")
+    parser.add_argument("--target", type=float, default=None,
+                        help="Profit target — bot stops when PnL >= target (e.g. --target 100)")
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -526,12 +560,19 @@ def main() -> None:
     amount = float(os.environ.get("IQ_AMOUNT", str(args.amount)))
     duration = int(os.environ.get("IQ_DURATION", str(args.duration)))
 
+    target = args.target
+    if target is None:
+        env_target = os.environ.get("PROFIT_TARGET")
+        if env_target:
+            target = float(env_target)
+
     lite = SyntrixLite(
         shadow=args.shadow,
         force=args.force,
         amount=amount,
         duration=duration,
         min_payout=args.min_payout,
+        target=target,
     )
 
     def on_signal(sig, frame):

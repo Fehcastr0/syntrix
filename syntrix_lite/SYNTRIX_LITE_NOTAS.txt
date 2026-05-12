@@ -2,7 +2,7 @@
   SYNTRIX LITE — Bloco de Notas / Documentacao Completa
   Validar Edge Real com Simplicidade
 ================================================================
-  Versao: 1.0.0
+  Versao: 1.2.0
   Ultima atualizacao: 2026-05-09
   Repositorio: https://github.com/Fehcastr0/syntrix
   PR: https://github.com/Fehcastr0/syntrix/pull/2
@@ -141,12 +141,13 @@ Scoring ADITIVO simples (nao multiplicativo):
 
 Apenas filtros ESSENCIAIS e justificados:
 
-  - Payout minimo: 60% (padrao, configuravel)
-  - Cooldown pos-trade: 15s
-  - Cooldown pos-loss streak: 60s
+  - Payout minimo: 50% (padrao, configuravel)
+  - Cooldown pos-trade: 5s
+  - Cooldown pos-loss streak: 30s
   - Stop gain: $30 (padrao)
   - Stop loss: -$15 (padrao)
-  - Max losses consecutivos: 3
+  - Meta de lucro: configuravel (--target)
+  - Max losses consecutivos: 5
   - Posicao unica: apenas 1 trade por vez
   - Volatilidade: ATR minimo para evitar mercado morto
 
@@ -159,10 +160,11 @@ Apenas filtros ESSENCIAIS e justificados:
 
   Stop Gain:    para a sessao quando PnL >= $30
   Stop Loss:    para a sessao quando PnL <= -$15
-  Max Losses:   apos 3 losses consecutivos, cooldown de 60s
-  Cooldown:     15s entre trades
+  Meta Lucro:   para quando PnL >= meta (--target)
+  Max Losses:   apos 5 losses consecutivos, cooldown de 30s
+  Cooldown:     5s entre trades
   Position:     apenas 1 trade por vez (sem double order)
-  Max Trades:   50 por sessao (protecao contra overtrading)
+  Max Trades:   500 por sessao (protecao contra overtrading)
 
   Objetivo: sobrevivencia + consistencia.
   NAO e "nunca perder", e "ganhar mais do que perde".
@@ -245,16 +247,19 @@ Apenas filtros ESSENCIAIS e justificados:
     python main.py --shadow                    # Shadow mode
     python main.py                             # Live demo
     python main.py --shadow --interval 15      # Shadow rapido
-    python main.py --amount 5 --duration 120   # Custom
+    python main.py --amount 5 --duration 1      # Custom amount
+    python main.py --target 100                  # Para ao lucrar R$100
+    python main.py --target 50 --amount 5        # Meta R$50, aposta $5
 
   ARQUIVO .env:
     IQ_EMAIL=seu@email.com
     IQ_PASSWORD=sua_senha
     IQ_PRACTICE=true
     IQ_AMOUNT=2.0
-    IQ_DURATION=60
+    IQ_DURATION=1
     STOP_GAIN=30
     STOP_LOSS=-15
+    PROFIT_TARGET=100
 
 
 ================================================================
@@ -295,21 +300,21 @@ Apenas filtros ESSENCIAIS e justificados:
     test_analytics.py        — 10 testes analytics
     test_shadow.py           — 3 testes shadow mode
 
-  Total: ~1.700 linhas | 14 arquivos | 40 testes
+  Total: ~1.800 linhas | 14 arquivos | 44 testes
 
 
 ================================================================
   13. TESTES
 ================================================================
 
-  40 testes unitarios, todos passando.
+  44 testes unitarios, todos passando.
 
   Rodar: python -m pytest tests/ -v
 
   Cobertura:
     Indicadores: EMA, RSI, ATR (basico, edge cases, bounds)
     Estrategias: uptrend, downtrend, score range
-    Risk: stop gain/loss, cooldown, position lock, stats
+    Risk: stop gain/loss, cooldown, position lock, stats, profit target
     Analytics: winrate, expectancy, drawdown, sharpe, agrupamentos
     Shadow: record, CSV, report
 
@@ -412,6 +417,54 @@ Apenas filtros ESSENCIAIS e justificados:
       7. LAUNCHER ATUALIZADO
         - Checkbox "FORCE ENTRY" no painel de config
         - Passa --force automaticamente quando marcado
+
+
+  [2026-05-09] v1.2.0 — BUGS CRITICOS + META DE LUCRO
+    PROBLEMAS RESOLVIDOS:
+
+      1. BUG CRITICO: PAYOUT DIVIDINDO POR 100 DUAS VEZES
+        - API do IQ Option retorna 0.86 (= 86%)
+        - Codigo fazia 0.86 / 100 = 0.0086 (= 1%)
+        - TODOS os 159 ativos mostravam payout=1%
+        - TODOS bloqueados por LOW_PAYOUT
+        - Removido o /100.0 do get_payout() em execution/broker.py
+        - RESULTADO: payout agora mostra 86% corretamente
+
+      2. BUG CRITICO: DURACAO EM MINUTOS, NAO SEGUNDOS
+        - API buy() espera expiracao em MINUTOS
+        - duration=60 significava 60 MINUTOS (1 hora!)
+        - Usuario sempre quis M1 (1 minuto)
+        - Corrigido: duration padrao = 1 (= 1 minuto = M1)
+        - Atualizado em: main.py, start.py, .env
+
+      3. NOVA FEATURE: META DE LUCRO (--target)
+        - Define meta de lucro: --target 100
+        - Bot opera ate PnL >= meta
+        - Para automaticamente com mensagem "META DE LUCRO ATINGIDA!"
+        - Mostra progresso em %: "Meta: 45% ($45.00/$100.00)"
+        - Campo "Meta de Lucro ($)" no launcher Tkinter
+        - Pode ser configurado via .env: PROFIT_TARGET=100
+        - Se meta > stop_gain, stop_gain e ajustado automaticamente
+        - Se meta = 0 ou nao definida, funciona sem meta (normal)
+
+      4. TESTES ADICIONADOS
+        - test_profit_target: verifica bloqueio ao atingir meta
+        - test_profit_target_progress: verifica calculo de progresso
+        - test_no_target: verifica funcionamento sem meta
+        - test_target_stats: verifica stats com meta
+        - Total: 44 testes passando (era 40)
+
+    COMO USAR META DE LUCRO:
+      Linha de comando:
+        python main.py --target 100        # Para ao lucrar $100
+        python main.py --target 50 --amount 5  # Meta $50, aposta $5
+
+      Launcher:
+        Preencher campo "Meta de Lucro ($)" com o valor desejado
+        0 = sem meta (funciona normalmente)
+
+      .env:
+        PROFIT_TARGET=100
 
 
 ================================================================

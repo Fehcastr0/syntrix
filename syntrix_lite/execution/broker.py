@@ -115,21 +115,23 @@ class BrokerAdapter:
         try:
             data = self._api.get_all_profit()
             if asset in data:
-                return float(data[asset].get("turbo", 0)) / 100.0
+                return float(data[asset].get("turbo", 0))
             return 0.0
         except Exception:
             logger.warning("Payout error %s: %s", asset, traceback.format_exc())
             return 0.0
 
     def buy(self, asset: str, amount: float, direction: str, duration: int) -> TradeResult:
-        """Execute a binary options trade."""
+        """Execute a binary options trade. Duration is in MINUTES (1=M1, 5=M5)."""
         if not self._api:
             return TradeResult(error="Not connected")
 
         start = time.time()
         try:
             action = "call" if direction == "call" else "put"
-            success, trade_id = self._api.buy(amount, asset, action, duration)
+            # IQ Option API expects expiration in MINUTES (1=1min, 5=5min)
+            expiration_min = duration
+            success, trade_id = self._api.buy(amount, asset, action, expiration_min)
             latency = (time.time() - start) * 1000
 
             if success:

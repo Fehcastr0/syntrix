@@ -23,8 +23,9 @@ class RiskConfig:
 class RiskManager:
     """Simple risk control."""
 
-    def __init__(self, config: RiskConfig | None = None) -> None:
+    def __init__(self, config: RiskConfig | None = None, profit_target: float | None = None) -> None:
         self.config = config or RiskConfig()
+        self.profit_target = profit_target
         self.pnl: float = 0.0
         self.total_trades: int = 0
         self.wins: int = 0
@@ -47,6 +48,12 @@ class RiskManager:
 
         if self._in_position:
             return False, "IN_POSITION"
+
+        # Profit target (priority over stop_gain)
+        if self.profit_target is not None and self.pnl >= self.profit_target:
+            self.locked = True
+            self.lock_reason = "PROFIT_TARGET"
+            return False, "PROFIT_TARGET"
 
         # Stop gain
         if self.pnl >= self.config.stop_gain:
@@ -103,9 +110,15 @@ class RiskManager:
             self.consecutive_losses += 1
             self.last_loss_time = time.time()
 
+    def target_progress(self) -> float | None:
+        """Return progress toward profit target (0.0 to 1.0+), or None if no target."""
+        if self.profit_target is None or self.profit_target <= 0:
+            return None
+        return self.pnl / self.profit_target
+
     def get_stats(self) -> dict:
         wr = self.wins / self.total_trades if self.total_trades > 0 else 0
-        return {
+        stats = {
             "pnl": round(self.pnl, 2),
             "total_trades": self.total_trades,
             "wins": self.wins,
@@ -115,3 +128,8 @@ class RiskManager:
             "locked": self.locked,
             "lock_reason": self.lock_reason,
         }
+        if self.profit_target is not None:
+            stats["profit_target"] = self.profit_target
+            progress = self.target_progress()
+            stats["target_progress"] = round(progress * 100, 1) if progress is not None else 0.0
+        return stats
