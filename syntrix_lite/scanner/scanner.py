@@ -31,10 +31,17 @@ class ScanResult:
     atr_values: List[float] = field(default_factory=list)
     trend_up: bool = False
     trend_down: bool = False
+    trend_strength: float = 0.0
+    trend_consistent: bool = False
     current_rsi: float = 50.0
+    prev_rsi: float = 50.0
     current_atr: float = 0.0
     volatility_ok: bool = True
     payout_ok: bool = True
+    last_candle_bullish: bool = False
+    last_candle_bearish: bool = False
+    last_candle_body_ratio: float = 0.0
+    ema_slope_fast: float = 0.0
 
 
 def scan_asset(
@@ -60,12 +67,43 @@ def scan_asset(
     atr_vals = atr(candles, atr_period)
 
     current_rsi = rsi_vals[-1] if rsi_vals else 50.0
+    prev_rsi = rsi_vals[-2] if len(rsi_vals) >= 2 else 50.0
     current_atr = atr_vals[-1] if atr_vals else 0.0
     last_close = closes[-1] if closes else 0
 
     # Trend direction
     trend_up = ema_f[-1] > ema_s[-1] if ema_f and ema_s else False
     trend_down = ema_f[-1] < ema_s[-1] if ema_f and ema_s else False
+
+    # Trend strength — how far EMAs are apart relative to price
+    trend_strength = 0.0
+    if ema_f and ema_s and last_close > 0:
+        trend_strength = abs(ema_f[-1] - ema_s[-1]) / last_close
+
+    # Trend consistency — EMA relationship held for last 3 candles
+    trend_consistent = False
+    if len(ema_f) >= 3 and len(ema_s) >= 3:
+        if trend_up:
+            trend_consistent = all(
+                ema_f[-i] > ema_s[-i] for i in range(1, 4)
+            )
+        elif trend_down:
+            trend_consistent = all(
+                ema_f[-i] < ema_s[-i] for i in range(1, 4)
+            )
+
+    # EMA fast slope (direction of last 3 EMA values)
+    ema_slope_fast = 0.0
+    if len(ema_f) >= 3:
+        ema_slope_fast = (ema_f[-1] - ema_f[-3]) / ema_f[-3] if ema_f[-3] > 0 else 0
+
+    # Last candle analysis
+    last = candles[-1]
+    body = last.close - last.open
+    candle_range = last.high - last.low
+    last_candle_bullish = body > 0
+    last_candle_bearish = body < 0
+    last_candle_body_ratio = abs(body) / candle_range if candle_range > 0 else 0
 
     # Volatility check — ATR must be meaningful
     atr_ratio = current_atr / last_close if last_close > 0 else 0
@@ -84,8 +122,15 @@ def scan_asset(
         atr_values=atr_vals,
         trend_up=trend_up,
         trend_down=trend_down,
+        trend_strength=trend_strength,
+        trend_consistent=trend_consistent,
         current_rsi=current_rsi,
+        prev_rsi=prev_rsi,
         current_atr=current_atr,
         volatility_ok=volatility_ok,
         payout_ok=payout_ok,
+        last_candle_bullish=last_candle_bullish,
+        last_candle_bearish=last_candle_bearish,
+        last_candle_body_ratio=last_candle_body_ratio,
+        ema_slope_fast=ema_slope_fast,
     )

@@ -35,12 +35,12 @@ from strategies import trend_pullback, momentum
 logger = logging.getLogger("syntrix-lite")
 
 
-# Thresholds — reduced to actually trade
-MIN_SCORE = 0.15         # Was 0.35 — now much lower to allow entries
-MIN_PAYOUT = 0.50        # Was 0.60 — accept lower payouts
-MIN_ATR_RATIO = 0.00001  # Was 0.0001 — accept almost any volatility
-COOLDOWN_TRADE = 5.0     # Was 15s — faster cycling
-COOLDOWN_LOSS = 30.0     # Was 60s — faster recovery
+# Thresholds — balanced for quality + volume
+MIN_SCORE = 0.30         # Quality threshold — strategies already filter well
+MIN_PAYOUT = 0.55        # Minimum viable payout
+MIN_ATR_RATIO = 0.00005  # Accept most volatility except dead flat
+COOLDOWN_TRADE = 5.0     # Fast cycling between trades
+COOLDOWN_LOSS = 30.0     # Recovery after loss streak
 
 
 def load_env(path: str = ".env") -> None:
@@ -133,7 +133,7 @@ class SyntrixLite:
         self._running = False
 
         # Score threshold
-        self._min_score = 0.10 if force else MIN_SCORE
+        self._min_score = 0.15 if force else MIN_SCORE
 
         # Broker
         self._broker = BrokerAdapter(
@@ -285,16 +285,17 @@ class SyntrixLite:
                 continue
 
             # Log indicators for every asset
+            trend_dir = "UP" if scan.trend_up else ("DOWN" if scan.trend_down else "FLAT")
+            candle_dir = "BULL" if scan.last_candle_bullish else ("BEAR" if scan.last_candle_bearish else "DOJI")
             logger.info(
-                "[SCAN] %s | EMA_F=%.5f EMA_S=%.5f | RSI=%.1f | ATR=%.6f | "
-                "payout=%.0f%% | trend=%s | vol_ok=%s | pay_ok=%s",
+                "[SCAN] %s | RSI=%.1f(prev=%.1f) | trend=%s%s str=%.5f | "
+                "candle=%s body=%.0f%% | payout=%.0f%%",
                 asset,
-                scan.ema_fast[-1] if scan.ema_fast else 0,
-                scan.ema_slow[-1] if scan.ema_slow else 0,
-                scan.current_rsi, scan.current_atr,
+                scan.current_rsi, scan.prev_rsi,
+                trend_dir, "+OK" if scan.trend_consistent else "",
+                scan.trend_strength,
+                candle_dir, scan.last_candle_body_ratio * 100,
                 payout * 100,
-                "UP" if scan.trend_up else ("DOWN" if scan.trend_down else "FLAT"),
-                scan.volatility_ok, scan.payout_ok,
             )
 
             # Payout check

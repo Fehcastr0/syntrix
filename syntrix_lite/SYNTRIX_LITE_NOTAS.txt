@@ -2,7 +2,7 @@
   SYNTRIX LITE — Bloco de Notas / Documentacao Completa
   Validar Edge Real com Simplicidade
 ================================================================
-  Versao: 1.2.0
+  Versao: 1.3.0
   Ultima atualizacao: 2026-05-09
   Repositorio: https://github.com/Fehcastr0/syntrix
   PR: https://github.com/Fehcastr0/syntrix/pull/2
@@ -85,33 +85,38 @@ Apenas 3 indicadores permitidos:
   4. ESTRATEGIAS
 ================================================================
 
-4.1 — TREND PULLBACK
-  Entra na direcao da tendencia quando RSI recua.
+4.1 — TREND PULLBACK (REVERSAO M1)
+  Entra CONTRA a tendencia quando RSI indica exaustao.
+  Em M1, o preco tende a CORRIGIR apos movimentos esticados.
 
-  CALL:
-    - EMA rapida > EMA lenta (tendencia de alta)
-    - RSI entre 40-65 (recuou mas nao vendido)
-    - ATR acima do minimo
+  PUT (mercado subiu demais):
+    - Tendencia de alta (EMA rapida > EMA lenta)
+    - RSI > 65 (sobrecomprado)
+    - RSI comecando a CAIR (prev_rsi > current_rsi)
+    - Ultimo candle BEARISH (confirmacao de reversao)
 
-  PUT:
-    - EMA rapida < EMA lenta (tendencia de baixa)
-    - RSI entre 35-60 (recuou mas nao comprado)
-    - ATR acima do minimo
+  CALL (mercado caiu demais):
+    - Tendencia de baixa (EMA rapida < EMA lenta)
+    - RSI < 35 (sobrevendido)
+    - RSI comecando a SUBIR (prev_rsi < current_rsi)
+    - Ultimo candle BULLISH (confirmacao de reversao)
 
-  Logica: "compra o pullback na tendencia"
+  Logica: "mercado esticou, vai corrigir"
 
-4.2 — MOMENTUM
-  Entra quando momento e forte na direcao da tendencia.
+4.2 — MOMENTUM REVERSAL (EXAUSTAO EXTREMA)
+  Entra quando RSI esta em zona EXTREMA e comeca a reverter.
 
-  CALL:
-    - EMA rapida > EMA lenta (tendencia de alta)
-    - RSI > 55 (momento forte para cima)
+  PUT (sobrecomprado extremo):
+    - RSI > 70 (zona extrema)
+    - RSI comecando a CAIR
+    - Ultimo candle BEARISH
 
-  PUT:
-    - EMA rapida < EMA lenta (tendencia de baixa)
-    - RSI < 45 (momento forte para baixo)
+  CALL (sobrevendido extremo):
+    - RSI < 30 (zona extrema)
+    - RSI comecando a SUBIR
+    - Ultimo candle BULLISH
 
-  Logica: "surfa o impulso"
+  Logica: "impulso esgotou, vai reverter"
 
 
 ================================================================
@@ -417,6 +422,58 @@ Apenas filtros ESSENCIAIS e justificados:
       7. LAUNCHER ATUALIZADO
         - Checkbox "FORCE ENTRY" no painel de config
         - Passa --force automaticamente quando marcado
+
+
+  [2026-05-09] v1.3.0 — LOGICA DE DIRECAO CORRIGIDA (REVERSAO M1)
+    PROBLEMA CRITICO:
+      Bot entrava na DIRECAO ERRADA!
+      Mercado em alta → bot colocava CALL (para cima)
+      Mas em M1, apos subida forte, preco CORRIGE para baixo → deveria ser PUT
+
+    CAUSA RAIZ:
+      Estrategias usavam logica de TREND FOLLOWING (seguir tendencia)
+      Isso funciona em timeframes longos (H1, H4, D1)
+      Em M1 (1 minuto), o que funciona e REVERSAO A MEDIA
+      Preco esticado → tende a corrigir na proxima vela
+
+    SOLUCAO — LOGICA COMPLETAMENTE REESCRITA:
+
+      1. TREND PULLBACK → REVERSAO M1
+        - Mercado subiu demais (RSI > 65 + uptrend) → PUT (vai corrigir)
+        - Mercado caiu demais (RSI < 35 + downtrend) → CALL (vai corrigir)
+        - Exige: RSI virando + candle de reversao confirmando
+
+      2. MOMENTUM → MOMENTUM REVERSAL
+        - RSI > 70 (sobrecomprado extremo) → PUT
+        - RSI < 30 (sobrevendido extremo) → CALL
+        - Exige: RSI virando + candle na direcao contraria
+
+      3. SCANNER MELHORADO
+        - Novo: trend_strength (separacao real das EMAs)
+        - Novo: trend_consistent (EMA mantida por 3+ candles)
+        - Novo: prev_rsi (RSI anterior para detectar virada)
+        - Novo: last_candle_bullish/bearish (confirmacao de candle)
+        - Novo: last_candle_body_ratio (forca do corpo)
+        - Novo: ema_slope_fast (inclinacao da EMA)
+
+      4. SCORING REBALANCEADO
+        - RSI exaustao: +0.35 (principal fator)
+        - Trend strength: +0.25 (houve movimento a ser corrigido)
+        - Candle de reversao: +0.20 (confirmacao visual)
+        - Payout: +0.10
+        - Wick rejection: +0.10 (pavio = rejeicao de preco)
+
+      5. THRESHOLD AJUSTADO
+        - Score minimo: 0.30 (era 0.15)
+        - Payout minimo: 55% (era 50%)
+        - Sinal precisa ser de QUALIDADE, nao quantidade
+
+      6. 45 TESTES PASSANDO (era 44)
+
+    REGRA DE OURO PARA M1:
+      "Se o mercado subiu muito → PUT (vai corrigir para baixo)"
+      "Se o mercado caiu muito → CALL (vai corrigir para cima)"
+      "NUNCA seguir a tendencia em M1 — entrar na CORRECAO"
 
 
   [2026-05-09] v1.2.0 — BUGS CRITICOS + META DE LUCRO
