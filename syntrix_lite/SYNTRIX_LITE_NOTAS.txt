@@ -2,7 +2,7 @@
   SYNTRIX LITE — Bloco de Notas / Documentacao Completa
   Validar Edge Real com Simplicidade
 ================================================================
-  Versao: 1.3.1
+  Versao: 1.4.0
   Ultima atualizacao: 2026-05-09
   Repositorio: https://github.com/Fehcastr0/syntrix
   PR: https://github.com/Fehcastr0/syntrix/pull/2
@@ -422,6 +422,40 @@ Apenas filtros ESSENCIAIS e justificados:
       7. LAUNCHER ATUALIZADO
         - Checkbox "FORCE ENTRY" no painel de config
         - Passa --force automaticamente quando marcado
+
+
+  [2026-05-09] v1.4.0 — DASHBOARD VISUAL INTUITIVO
+    PROBLEMA:
+      Usuario nao via o que acontecia — sem log, sem status, sem resumo.
+      Bot parava e ninguem sabia por que.
+
+    SOLUCAO — DASHBOARD COMPLETO (start.py reescrito):
+      1. PAINEL PnL GRANDE — valor em destaque, verde (lucro) / vermelho (perda)
+      2. CARDS DE STATUS — Wins, Losses, Winrate em tempo real
+      3. ULTIMO TRADE — mostra ativo, direcao, resultado
+      4. BANNER DE PARADA — quando bot para, mostra motivo em destaque:
+         - Verde: META ATINGIDA / STOP GAIN
+         - Vermelho: STOP LOSS
+      5. LOG COLORIDO — cada tipo de mensagem tem cor diferente:
+         - Verde: sucesso/normal
+         - Vermelho: erro/loss
+         - Amarelo: aviso
+         - Azul: info
+      6. CONFIGURACOES RETRATIVEIS — clica em "+ Configuracoes" para abrir
+         - Email, senha, valor, duracao, intervalo
+         - Meta de lucro, stop gain, stop loss
+         - Force entry checkbox
+      7. BOTOES — Shadow / Live / Parar
+      8. LOG SALVO EM ARQUIVO — syntrix_lite.log (sempre disponivel)
+      9. OUTPUT NAO BUFFERIZADO — usa python -u + PYTHONUNBUFFERED=1
+         Logs aparecem IMEDIATAMENTE, sem atraso
+
+    DETALHES TECNICOS:
+      - Tema escuro profissional (#0d1117)
+      - Parse de logs em tempo real com regex
+      - Tags coloridas no console
+      - Thread separada para leitura do subprocess
+      - Footer mostra versao e localizacao do log
 
 
   [2026-05-09] v1.3.1 — RESUMO DE SESSAO + MOTIVO DE PARADA
