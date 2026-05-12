@@ -2,7 +2,7 @@
   SYNTRIX LITE — Bloco de Notas / Documentacao Completa
   Validar Edge Real com Simplicidade
 ================================================================
-  Versao: 1.3.0
+  Versao: 1.3.1
   Ultima atualizacao: 2026-05-09
   Repositorio: https://github.com/Fehcastr0/syntrix
   PR: https://github.com/Fehcastr0/syntrix/pull/2
@@ -422,6 +422,34 @@ Apenas filtros ESSENCIAIS e justificados:
       7. LAUNCHER ATUALIZADO
         - Checkbox "FORCE ENTRY" no painel de config
         - Passa --force automaticamente quando marcado
+
+
+  [2026-05-09] v1.3.1 — RESUMO DE SESSAO + MOTIVO DE PARADA
+    PROBLEMA:
+      Bot parava sozinho e usuario nao sabia POR QUE parou.
+      Nenhum resumo era mostrado.
+
+    SOLUCAO:
+      1. RESUMO COMPLETO quando sessao encerra:
+        - MOTIVO em portugues (STOP LOSS, STOP GAIN, META, MAX TRADES, CTRL+C)
+        - PnL total, trades, wins, losses, winrate
+        - Meta de lucro (se definida) com progresso
+        - Stop gain e stop loss atuais
+        - Expectancy e Sharpe
+        - Resultados por estrategia e por ativo (top 5)
+        - DICA: como ajustar stop_loss/stop_gain no .env
+
+      2. MOTIVOS DE PARADA POSSIVEIS:
+        - STOP_LOSS: PnL <= -$15 (padrao). Ajuste: STOP_LOSS=-30 no .env
+        - STOP_GAIN: PnL >= $30 (padrao). Ajuste: STOP_GAIN=100 no .env
+        - PROFIT_TARGET: PnL >= meta (--target). Bot para quando atingir
+        - MAX_TRADES: 500 trades na sessao
+        - INTERRUPTED: Usuario parou com Ctrl+C
+
+      3. STATS a cada ciclo mostra W/L:
+        [STATS] trades=5 WR=60% PnL=$3.44 W=3 L=2 streak=0
+
+      4. Cooldowns nao poluem mais o log (movidos para DEBUG)
 
 
   [2026-05-09] v1.3.0 — LOGICA DE DIRECAO CORRIGIDA (REVERSAO M1)

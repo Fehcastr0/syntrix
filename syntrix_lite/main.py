@@ -237,11 +237,14 @@ class SyntrixLite:
         # Risk check
         can_trade, reason = self._risk.can_trade()
         if not can_trade:
-            logger.info("[RISK] BLOCKED: %s", reason)
+            if "COOLDOWN" in reason:
+                logger.debug("[RISK] Aguardando: %s", reason)
+            else:
+                logger.info("[RISK] BLOQUEADO: %s | PnL=$%.2f", reason, self._risk.pnl)
             self._metrics.blocked_by_risk += 1
             return
 
-        logger.info("[RISK] OK — can trade")
+        logger.info("[RISK] OK — PnL=$%.2f | pode operar", self._risk.pnl)
 
         now_utc = datetime.datetime.now(datetime.timezone.utc)
         hour_utc = now_utc.hour
@@ -456,9 +459,72 @@ class SyntrixLite:
             self._analytics.total,
         )
 
+    def _print_session_end(self, reason: str) -> None:
+        """Print clear session end summary so user knows exactly what happened."""
+        stats = self._risk.get_stats()
+        logger.info("")
+        logger.info("=" * 60)
+        logger.info("  SESSAO ENCERRADA!")
+        logger.info("=" * 60)
+
+        # Reason in Portuguese
+        reason_pt = {
+            "STOP_LOSS": "STOP LOSS ATINGIDO (perda maxima)",
+            "STOP_GAIN": "STOP GAIN ATINGIDO (lucro maximo)",
+            "PROFIT_TARGET": "META DE LUCRO ATINGIDA!",
+            "MAX_TRADES": "MAXIMO DE TRADES DA SESSAO",
+            "INTERRUPTED": "PARADO PELO USUARIO (Ctrl+C)",
+        }.get(reason, reason)
+
+        logger.info("  MOTIVO: %s", reason_pt)
+        logger.info("")
+        logger.info("  ===== RESUMO DA SESSAO =====")
+        logger.info("  PnL Total:    $%.2f", stats["pnl"])
+        logger.info("  Trades:       %d", stats["total_trades"])
+        logger.info("  Wins:         %d", stats["wins"])
+        logger.info("  Losses:       %d", stats["losses"])
+        logger.info("  Winrate:      %.1f%%", stats["winrate"])
+
+        if self._target is not None:
+            progress = stats.get("target_progress", 0)
+            logger.info("  Meta:         $%.2f (%.0f%%)", self._target, progress)
+
+        logger.info("  Stop Gain:    $%.2f", self._risk.config.stop_gain)
+        logger.info("  Stop Loss:    $%.2f", self._risk.config.stop_loss)
+        logger.info("")
+
+        # Analytics report if we have trades
+        if self._analytics.total > 0:
+            logger.info("  ===== ANALYTICS =====")
+            exp = self._analytics.expectancy()
+            logger.info("  Expectancy:   $%.4f por trade", exp)
+            sharpe = self._analytics.sharpe()
+            logger.info("  Sharpe:       %.2f", sharpe)
+
+            by_strategy = self._analytics.by_strategy()
+            if by_strategy:
+                logger.info("  Por Estrategia:")
+                for strat, data in by_strategy.items():
+                    logger.info("    %s: %d trades, WR=%.0f%%, PnL=$%.2f",
+                                strat, data["trades"], data["winrate"] * 100, data["pnl"])
+
+            by_asset = self._analytics.by_asset()
+            if by_asset:
+                logger.info("  Por Ativo:")
+                for asset, data in sorted(by_asset.items(), key=lambda x: x[1]["pnl"], reverse=True)[:5]:
+                    logger.info("    %s: %d trades, WR=%.0f%%, PnL=$%.2f",
+                                asset, data["trades"], data["winrate"] * 100, data["pnl"])
+
+        logger.info("=" * 60)
+        logger.info("  Dica: Ajuste stop_loss/stop_gain no .env se parou rapido demais")
+        logger.info("  STOP_GAIN=%s | STOP_LOSS=%s (no .env)",
+                     os.environ.get("STOP_GAIN", "30"), os.environ.get("STOP_LOSS", "-15"))
+        logger.info("=" * 60)
+
     def run(self, interval: float = 30.0) -> None:
         """Main loop."""
         logger.info("Main loop started (interval=%.0fs)", interval)
+        stop_reason = ""
         try:
             while self._running:
                 try:
@@ -478,27 +544,23 @@ class SyntrixLite:
                         progress = stats.get("target_progress", 0)
                         target_info = f" | Meta: {progress:.0f}% (${stats['pnl']:.2f}/${self._target:.2f})"
                     logger.info(
-                        "[STATS] trades=%d WR=%.0f%% PnL=$%.2f streak=%d%s",
+                        "[STATS] trades=%d WR=%.0f%% PnL=$%.2f W=%d L=%d streak=%d%s",
                         stats["total_trades"], stats["winrate"],
-                        stats["pnl"], stats["consecutive_losses"],
-                        target_info,
+                        stats["pnl"], stats["wins"], stats["losses"],
+                        stats["consecutive_losses"], target_info,
                     )
 
-                # Check if profit target reached
-                if self._risk.locked and self._risk.lock_reason == "PROFIT_TARGET":
-                    logger.info("")
-                    logger.info("=" * 50)
-                    logger.info("  META DE LUCRO ATINGIDA!")
-                    logger.info("  Target: $%.2f | PnL: $%.2f", self._target, self._risk.pnl)
-                    logger.info("  Trades: %d | WR: %.0f%%",
-                                stats["total_trades"], stats["winrate"])
-                    logger.info("=" * 50)
+                # Check if session is locked (STOP_LOSS, STOP_GAIN, PROFIT_TARGET, MAX_TRADES)
+                if self._risk.locked:
+                    stop_reason = self._risk.lock_reason
                     break
 
                 time.sleep(interval)
         except KeyboardInterrupt:
-            logger.info("Interrupted")
+            stop_reason = "INTERRUPTED"
         finally:
+            if stop_reason:
+                self._print_session_end(stop_reason)
             self.stop()
 
     def stop(self) -> None:
