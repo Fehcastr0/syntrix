@@ -1,0 +1,610 @@
+================================================================
+  SYNTRIX LITE — Bloco de Notas / Documentacao Completa
+  Validar Edge Real com Simplicidade
+================================================================
+  Versao: 1.4.0
+  Ultima atualizacao: 2026-05-09
+  Repositorio: https://github.com/Fehcastr0/syntrix
+  PR: https://github.com/Fehcastr0/syntrix/pull/2
+================================================================
+
+
+================================================================
+  1. O QUE E O SYNTRIX LITE
+================================================================
+
+O Syntrix Lite e uma versao MINIMALISTA do Syntrix, focada em:
+
+  - OPERAR (nao apenas analisar)
+  - COLETAR DADOS REAIS
+  - VALIDAR EDGE ESTATISTICAMENTE
+  - MANTER RISCO CONTROLADO
+  - SIMPLICIDADE OPERACIONAL
+
+Filosofia:
+  "Menos complexidade. Mais execucao. Mais validacao estatistica."
+
+O Syntrix principal ficou excessivamente complexo:
+  - 50+ filtros bloqueando operacoes
+  - Modelo multiplicativo causando colapso de scores
+  - Sistema praticamente nao fazia entradas
+  - Muita inteligencia, pouca execucao
+
+O Syntrix Lite resolve isso com:
+  - 2 estrategias simples
+  - 3 indicadores objetivos
+  - Scoring aditivo (sem cascata multiplicativa)
+  - Threshold unico e direto
+  - Filtros minimos e justificados
+
+
+================================================================
+  2. ARQUITETURA
+================================================================
+
+Pipeline:
+  SCAN ASSETS -> STRATEGIES -> SCORE -> BEST SIGNAL -> RISK -> EXECUTE
+
+Modulos (6 apenas):
+  scanner/     — indicadores + scanner de ativos
+  strategies/  — trend pullback + momentum
+  risk/        — stop gain/loss, cooldown, position lock
+  execution/   — broker adapter + shadow mode
+  analytics/   — winrate, expectancy, drawdown, sharpe
+  logs/        — trade logger CSV
+
+Nenhum modulo desnecessario. Nenhum overengineering.
+
+
+================================================================
+  3. INDICADORES
+================================================================
+
+Apenas 3 indicadores permitidos:
+
+  EMA (Exponential Moving Average)
+    - EMA rapida (9 periodos) vs EMA lenta (21 periodos)
+    - Determina direcao da tendencia
+    - EMA rapida > EMA lenta = tendencia de alta
+    - EMA rapida < EMA lenta = tendencia de baixa
+
+  RSI (Relative Strength Index)
+    - Periodo: 14
+    - Mede forca/fraqueza do momento
+    - Usado para pullback (45-65 call, 35-55 put)
+    - Usado para momentum (>55 call, <45 put)
+
+  ATR (Average True Range)
+    - Periodo: 14
+    - Mede volatilidade real
+    - Filtro: ATR minimo para evitar mercado parado
+    - Volatilidade muito baixa = nao operar
+
+
+================================================================
+  4. ESTRATEGIAS
+================================================================
+
+4.1 — TREND PULLBACK (REVERSAO M1)
+  Entra CONTRA a tendencia quando RSI indica exaustao.
+  Em M1, o preco tende a CORRIGIR apos movimentos esticados.
+
+  PUT (mercado subiu demais):
+    - Tendencia de alta (EMA rapida > EMA lenta)
+    - RSI > 65 (sobrecomprado)
+    - RSI comecando a CAIR (prev_rsi > current_rsi)
+    - Ultimo candle BEARISH (confirmacao de reversao)
+
+  CALL (mercado caiu demais):
+    - Tendencia de baixa (EMA rapida < EMA lenta)
+    - RSI < 35 (sobrevendido)
+    - RSI comecando a SUBIR (prev_rsi < current_rsi)
+    - Ultimo candle BULLISH (confirmacao de reversao)
+
+  Logica: "mercado esticou, vai corrigir"
+
+4.2 — MOMENTUM REVERSAL (EXAUSTAO EXTREMA)
+  Entra quando RSI esta em zona EXTREMA e comeca a reverter.
+
+  PUT (sobrecomprado extremo):
+    - RSI > 70 (zona extrema)
+    - RSI comecando a CAIR
+    - Ultimo candle BEARISH
+
+  CALL (sobrevendido extremo):
+    - RSI < 30 (zona extrema)
+    - RSI comecando a SUBIR
+    - Ultimo candle BULLISH
+
+  Logica: "impulso esgotou, vai reverter"
+
+
+================================================================
+  5. SCORING
+================================================================
+
+Scoring ADITIVO simples (nao multiplicativo):
+
+  Tendencia:      +0.40 max (forca da separacao EMA)
+  RSI favoravel:  +0.30 max (posicao ideal do RSI)
+  Volatilidade:   +0.20 (ATR OK)
+  Payout bom:     +0.10 (payout >= 80% = +0.10, >= 70% = +0.05)
+
+  Score maximo: 1.00
+  Threshold: 0.35 (score > 0.35 = entra)
+
+  SEM:
+  - Multiplicacao em cascata
+  - Penalidades compostas
+  - Colapso probabilistico
+  - 20 camadas de bloqueio
+
+
+================================================================
+  6. FILTROS (MINIMOS)
+================================================================
+
+Apenas filtros ESSENCIAIS e justificados:
+
+  - Payout minimo: 50% (padrao, configuravel)
+  - Cooldown pos-trade: 5s
+  - Cooldown pos-loss streak: 30s
+  - Stop gain: $30 (padrao)
+  - Stop loss: -$15 (padrao)
+  - Meta de lucro: configuravel (--target)
+  - Max losses consecutivos: 5
+  - Posicao unica: apenas 1 trade por vez
+  - Volatilidade: ATR minimo para evitar mercado morto
+
+  Todo filtro que nao prova utilidade sera REMOVIDO.
+
+
+================================================================
+  7. RISK MANAGEMENT
+================================================================
+
+  Stop Gain:    para a sessao quando PnL >= $30
+  Stop Loss:    para a sessao quando PnL <= -$15
+  Meta Lucro:   para quando PnL >= meta (--target)
+  Max Losses:   apos 5 losses consecutivos, cooldown de 30s
+  Cooldown:     5s entre trades
+  Position:     apenas 1 trade por vez (sem double order)
+  Max Trades:   500 por sessao (protecao contra overtrading)
+
+  Objetivo: sobrevivencia + consistencia.
+  NAO e "nunca perder", e "ganhar mais do que perde".
+
+
+================================================================
+  8. SHADOW MODE
+================================================================
+
+  Comando: python main.py --shadow
+
+  O que faz:
+  - Executa logica COMPLETA de scan + estrategia + scoring
+  - NAO envia ordem real ao broker
+  - Registra TUDO em CSV (data/shadow/shadow_YYYYMMDD.csv)
+
+  Campos registrados:
+  - timestamp, datetime, ativo, direcao, estrategia
+  - score, payout, RSI, ATR, hora UTC
+  - decisao (EXECUTE/BLOCK), motivo do bloqueio
+  - resultado simulado, profit simulado
+
+  Objetivo: gerar milhares de amostras rapidamente para
+  validar edge antes de operar com dinheiro real.
+
+
+================================================================
+  9. ANALYTICS
+================================================================
+
+  Metricas calculadas:
+  - Winrate (geral e por dimensao)
+  - Expectancy (lucro medio por trade)
+  - PnL total
+  - Max Drawdown
+  - Sharpe ratio simples
+
+  Por dimensao:
+  - Por ativo (EURUSD-OTC, GBPUSD-OTC, etc)
+  - Por estrategia (trend_pullback, momentum)
+  - Por hora UTC (00h-23h)
+
+  Objetivo: descobrir RAPIDAMENTE o que funciona e o que nao.
+  Relatorio impresso automaticamente ao parar o sistema.
+
+
+================================================================
+  10. ATIVOS MONITORADOS
+================================================================
+
+  OTC (funcionam 24h):
+    EURUSD-OTC, GBPUSD-OTC, EURJPY-OTC, USDJPY-OTC,
+    AUDCAD-OTC, AUDUSD-OTC, EURGBP-OTC, GBPJPY-OTC,
+    NZDUSD-OTC, USDCAD-OTC, USDCHF-OTC
+
+  Forex regular:
+    EURUSD, GBPUSD, USDJPY, AUDUSD, EURJPY
+
+  Total: 16 ativos
+  Discovery automatico: detecta ativos abertos via broker
+
+
+================================================================
+  11. COMO USAR
+================================================================
+
+  INSTALAR:
+    1. Copiar pasta para desktop
+    2. Criar .env com credenciais (ou usar o launcher)
+    3. Rodar: python instalar.bat (ou pip install -r requirements.txt)
+
+  LAUNCHER (recomendado):
+    python start.py
+    - Preencher email e senha
+    - Clicar "SHADOW MODE" para simular
+    - Clicar "LIVE MODE" para operar em demo
+    - Console mostra logs em tempo real
+
+  LINHA DE COMANDO:
+    python main.py --shadow                    # Shadow mode
+    python main.py                             # Live demo
+    python main.py --shadow --interval 15      # Shadow rapido
+    python main.py --amount 5 --duration 1      # Custom amount
+    python main.py --target 100                  # Para ao lucrar R$100
+    python main.py --target 50 --amount 5        # Meta R$50, aposta $5
+
+  ARQUIVO .env:
+    IQ_EMAIL=seu@email.com
+    IQ_PASSWORD=sua_senha
+    IQ_PRACTICE=true
+    IQ_AMOUNT=2.0
+    IQ_DURATION=1
+    STOP_GAIN=30
+    STOP_LOSS=-15
+    PROFIT_TARGET=100
+
+
+================================================================
+  12. ARQUIVOS DO PROJETO
+================================================================
+
+  main.py                    — Entry point principal
+  start.py                   — Launcher Tkinter
+  instalar.bat               — Instalacao automatica
+  .env                       — Credenciais (nao commitado)
+  requirements.txt           — Dependencias
+
+  scanner/
+    indicators.py            — EMA, RSI, ATR
+    scanner.py               — Scanner de ativos
+
+  strategies/
+    trend_pullback.py        — Estrategia Trend Pullback
+    momentum.py              — Estrategia Momentum
+
+  risk/
+    risk_manager.py          — Gestao de risco
+
+  execution/
+    broker.py                — Adapter IQ Option
+    shadow.py                — Shadow mode
+
+  analytics/
+    tracker.py               — Analytics (winrate, sharpe, etc)
+
+  logs/
+    logger.py                — Trade logger CSV
+
+  tests/
+    test_indicators.py       — 11 testes indicadores
+    test_strategies.py       — 6 testes estrategias
+    test_risk.py             — 11 testes risk manager
+    test_analytics.py        — 10 testes analytics
+    test_shadow.py           — 3 testes shadow mode
+
+  Total: ~1.800 linhas | 14 arquivos | 44 testes
+
+
+================================================================
+  13. TESTES
+================================================================
+
+  44 testes unitarios, todos passando.
+
+  Rodar: python -m pytest tests/ -v
+
+  Cobertura:
+    Indicadores: EMA, RSI, ATR (basico, edge cases, bounds)
+    Estrategias: uptrend, downtrend, score range
+    Risk: stop gain/loss, cooldown, position lock, stats, profit target
+    Analytics: winrate, expectancy, drawdown, sharpe, agrupamentos
+    Shadow: record, CSV, report
+
+
+================================================================
+  14. DIFERENCAS DO SYNTRIX PRINCIPAL
+================================================================
+
+  SYNTRIX PRINCIPAL:
+    - 75+ arquivos, 13.000+ linhas
+    - 22+ modulos complexos
+    - Asset DNA, OTC Intelligence, Market Phase (10 fases)
+    - Meta Scoring multiplicativo
+    - Adaptive thresholds, microstructure, strategy health
+    - EventBus assincrono, replay engine, event sourcing
+    - Resultado: nao operava
+
+  SYNTRIX LITE:
+    - 14 arquivos, ~1.700 linhas
+    - 6 modulos simples
+    - 2 estrategias, 3 indicadores
+    - Scoring aditivo
+    - Threshold unico direto
+    - Resultado: OPERA
+
+
+================================================================
+  15. HISTORICO DE ATUALIZACOES
+================================================================
+
+  [2026-05-09] v1.0.0 — LANCAMENTO
+    - Sistema completo minimalista
+    - 2 estrategias: Trend Pullback + Momentum
+    - 3 indicadores: EMA, RSI, ATR
+    - Scoring aditivo simples
+    - Risk manager: stop gain/loss, cooldown, position lock
+    - Shadow mode completo
+    - Analytics: winrate, expectancy, drawdown, sharpe
+    - Broker adapter IQ Option (iqbroker)
+    - Trade logger CSV
+    - Launcher Tkinter (start.py)
+    - 40 testes passando
+    - .env com credenciais pre-configurado
+
+  [2026-05-09] v1.1.0 — DEBUG OPERACIONAL + FORCE ENTRY
+    PROBLEMA: sistema nao fazia entradas
+
+    CAUSA RAIZ IDENTIFICADA:
+      - Threshold muito alto (0.35) bloqueava maioria dos sinais
+      - RSI ranges muito estreitos (40-65 call, 35-60 put)
+      - ATR minimo muito alto (0.0001) bloqueava ativos calmos
+      - Payout minimo 60% eliminava ativos validos
+      - Cooldown 15s entre trades muito longo
+      - Logs em nivel DEBUG nao apareciam — usuario nao via NADA
+      - Nenhum log quando ciclo nao gerava sinais
+
+    SOLUCOES IMPLEMENTADAS:
+
+      1. DEBUG COMPLETO DO PIPELINE
+        - Logs em CADA etapa: SCAN, INDICATORS, STRATEGY, SCORE, RISK, DECISION
+        - Cada ativo mostra: EMA, RSI, ATR, payout, trend, volatility
+        - Cada estrategia mostra: signal/no_signal, score, direction
+        - Decisao mostra: PASS/REJECT e motivo exato
+        - Cycles numerados para tracking
+
+      2. FORCE ENTRY MODE (--force)
+        - Threshold reduzido para 0.10 (era 0.35)
+        - Ignora filtro de volatilidade
+        - Objetivo: confirmar se pipeline funciona end-to-end
+        - Botao no launcher: "FORCE ENTRY (score > 0.10 = entra)"
+
+      3. RESTRICOES REDUZIDAS
+        - Threshold: 0.35 -> 0.15 (normal) / 0.10 (force)
+        - Payout minimo: 60% -> 50%
+        - ATR ratio: 0.0001 -> 0.00001 (aceita quase tudo)
+        - Cooldown trade: 15s -> 5s
+        - Cooldown loss: 60s -> 30s
+        - Max consecutive losses: 3 -> 5
+        - Max trades session: 50 -> 100
+
+      4. RSI RANGES AMPLIADOS
+        - Trend Pullback CALL: 40-65 -> 30-70
+        - Trend Pullback PUT: 35-60 -> 30-70
+        - Momentum CALL: >55 -> >50
+        - Momentum PUT: <45 -> <50
+
+      5. METRICAS OPERACIONAIS (OperationalMetrics)
+        - scans_total, no_candles, scan_failed
+        - low_payout, low_volatility, no_trend
+        - strategy_matches, scores_above/below_threshold
+        - blocked_by_risk, execution_attempts/success/failures
+        - shadow_executes
+        - Relatorio automatico a cada 5 minutos
+
+      6. TRACEBACK COMPLETO
+        - Toda excecao mostra traceback completo
+        - Nunca except: pass
+        - Errors de broker, candles, execution — tudo visivel
+
+      7. LAUNCHER ATUALIZADO
+        - Checkbox "FORCE ENTRY" no painel de config
+        - Passa --force automaticamente quando marcado
+
+
+  [2026-05-09] v1.4.0 — DASHBOARD VISUAL INTUITIVO
+    PROBLEMA:
+      Usuario nao via o que acontecia — sem log, sem status, sem resumo.
+      Bot parava e ninguem sabia por que.
+
+    SOLUCAO — DASHBOARD COMPLETO (start.py reescrito):
+      1. PAINEL PnL GRANDE — valor em destaque, verde (lucro) / vermelho (perda)
+      2. CARDS DE STATUS — Wins, Losses, Winrate em tempo real
+      3. ULTIMO TRADE — mostra ativo, direcao, resultado
+      4. BANNER DE PARADA — quando bot para, mostra motivo em destaque:
+         - Verde: META ATINGIDA / STOP GAIN
+         - Vermelho: STOP LOSS
+      5. LOG COLORIDO — cada tipo de mensagem tem cor diferente:
+         - Verde: sucesso/normal
+         - Vermelho: erro/loss
+         - Amarelo: aviso
+         - Azul: info
+      6. CONFIGURACOES RETRATIVEIS — clica em "+ Configuracoes" para abrir
+         - Email, senha, valor, duracao, intervalo
+         - Meta de lucro, stop gain, stop loss
+         - Force entry checkbox
+      7. BOTOES — Shadow / Live / Parar
+      8. LOG SALVO EM ARQUIVO — syntrix_lite.log (sempre disponivel)
+      9. OUTPUT NAO BUFFERIZADO — usa python -u + PYTHONUNBUFFERED=1
+         Logs aparecem IMEDIATAMENTE, sem atraso
+
+    DETALHES TECNICOS:
+      - Tema escuro profissional (#0d1117)
+      - Parse de logs em tempo real com regex
+      - Tags coloridas no console
+      - Thread separada para leitura do subprocess
+      - Footer mostra versao e localizacao do log
+
+
+  [2026-05-09] v1.3.1 — RESUMO DE SESSAO + MOTIVO DE PARADA
+    PROBLEMA:
+      Bot parava sozinho e usuario nao sabia POR QUE parou.
+      Nenhum resumo era mostrado.
+
+    SOLUCAO:
+      1. RESUMO COMPLETO quando sessao encerra:
+        - MOTIVO em portugues (STOP LOSS, STOP GAIN, META, MAX TRADES, CTRL+C)
+        - PnL total, trades, wins, losses, winrate
+        - Meta de lucro (se definida) com progresso
+        - Stop gain e stop loss atuais
+        - Expectancy e Sharpe
+        - Resultados por estrategia e por ativo (top 5)
+        - DICA: como ajustar stop_loss/stop_gain no .env
+
+      2. MOTIVOS DE PARADA POSSIVEIS:
+        - STOP_LOSS: PnL <= -$15 (padrao). Ajuste: STOP_LOSS=-30 no .env
+        - STOP_GAIN: PnL >= $30 (padrao). Ajuste: STOP_GAIN=100 no .env
+        - PROFIT_TARGET: PnL >= meta (--target). Bot para quando atingir
+        - MAX_TRADES: 500 trades na sessao
+        - INTERRUPTED: Usuario parou com Ctrl+C
+
+      3. STATS a cada ciclo mostra W/L:
+        [STATS] trades=5 WR=60% PnL=$3.44 W=3 L=2 streak=0
+
+      4. Cooldowns nao poluem mais o log (movidos para DEBUG)
+
+
+  [2026-05-09] v1.3.0 — LOGICA DE DIRECAO CORRIGIDA (REVERSAO M1)
+    PROBLEMA CRITICO:
+      Bot entrava na DIRECAO ERRADA!
+      Mercado em alta → bot colocava CALL (para cima)
+      Mas em M1, apos subida forte, preco CORRIGE para baixo → deveria ser PUT
+
+    CAUSA RAIZ:
+      Estrategias usavam logica de TREND FOLLOWING (seguir tendencia)
+      Isso funciona em timeframes longos (H1, H4, D1)
+      Em M1 (1 minuto), o que funciona e REVERSAO A MEDIA
+      Preco esticado → tende a corrigir na proxima vela
+
+    SOLUCAO — LOGICA COMPLETAMENTE REESCRITA:
+
+      1. TREND PULLBACK → REVERSAO M1
+        - Mercado subiu demais (RSI > 65 + uptrend) → PUT (vai corrigir)
+        - Mercado caiu demais (RSI < 35 + downtrend) → CALL (vai corrigir)
+        - Exige: RSI virando + candle de reversao confirmando
+
+      2. MOMENTUM → MOMENTUM REVERSAL
+        - RSI > 70 (sobrecomprado extremo) → PUT
+        - RSI < 30 (sobrevendido extremo) → CALL
+        - Exige: RSI virando + candle na direcao contraria
+
+      3. SCANNER MELHORADO
+        - Novo: trend_strength (separacao real das EMAs)
+        - Novo: trend_consistent (EMA mantida por 3+ candles)
+        - Novo: prev_rsi (RSI anterior para detectar virada)
+        - Novo: last_candle_bullish/bearish (confirmacao de candle)
+        - Novo: last_candle_body_ratio (forca do corpo)
+        - Novo: ema_slope_fast (inclinacao da EMA)
+
+      4. SCORING REBALANCEADO
+        - RSI exaustao: +0.35 (principal fator)
+        - Trend strength: +0.25 (houve movimento a ser corrigido)
+        - Candle de reversao: +0.20 (confirmacao visual)
+        - Payout: +0.10
+        - Wick rejection: +0.10 (pavio = rejeicao de preco)
+
+      5. THRESHOLD AJUSTADO
+        - Score minimo: 0.30 (era 0.15)
+        - Payout minimo: 55% (era 50%)
+        - Sinal precisa ser de QUALIDADE, nao quantidade
+
+      6. 45 TESTES PASSANDO (era 44)
+
+    REGRA DE OURO PARA M1:
+      "Se o mercado subiu muito → PUT (vai corrigir para baixo)"
+      "Se o mercado caiu muito → CALL (vai corrigir para cima)"
+      "NUNCA seguir a tendencia em M1 — entrar na CORRECAO"
+
+
+  [2026-05-09] v1.2.0 — BUGS CRITICOS + META DE LUCRO
+    PROBLEMAS RESOLVIDOS:
+
+      1. BUG CRITICO: PAYOUT DIVIDINDO POR 100 DUAS VEZES
+        - API do IQ Option retorna 0.86 (= 86%)
+        - Codigo fazia 0.86 / 100 = 0.0086 (= 1%)
+        - TODOS os 159 ativos mostravam payout=1%
+        - TODOS bloqueados por LOW_PAYOUT
+        - Removido o /100.0 do get_payout() em execution/broker.py
+        - RESULTADO: payout agora mostra 86% corretamente
+
+      2. BUG CRITICO: DURACAO EM MINUTOS, NAO SEGUNDOS
+        - API buy() espera expiracao em MINUTOS
+        - duration=60 significava 60 MINUTOS (1 hora!)
+        - Usuario sempre quis M1 (1 minuto)
+        - Corrigido: duration padrao = 1 (= 1 minuto = M1)
+        - Atualizado em: main.py, start.py, .env
+
+      3. NOVA FEATURE: META DE LUCRO (--target)
+        - Define meta de lucro: --target 100
+        - Bot opera ate PnL >= meta
+        - Para automaticamente com mensagem "META DE LUCRO ATINGIDA!"
+        - Mostra progresso em %: "Meta: 45% ($45.00/$100.00)"
+        - Campo "Meta de Lucro ($)" no launcher Tkinter
+        - Pode ser configurado via .env: PROFIT_TARGET=100
+        - Se meta > stop_gain, stop_gain e ajustado automaticamente
+        - Se meta = 0 ou nao definida, funciona sem meta (normal)
+
+      4. TESTES ADICIONADOS
+        - test_profit_target: verifica bloqueio ao atingir meta
+        - test_profit_target_progress: verifica calculo de progresso
+        - test_no_target: verifica funcionamento sem meta
+        - test_target_stats: verifica stats com meta
+        - Total: 44 testes passando (era 40)
+
+    COMO USAR META DE LUCRO:
+      Linha de comando:
+        python main.py --target 100        # Para ao lucrar $100
+        python main.py --target 50 --amount 5  # Meta $50, aposta $5
+
+      Launcher:
+        Preencher campo "Meta de Lucro ($)" com o valor desejado
+        0 = sem meta (funciona normalmente)
+
+      .env:
+        PROFIT_TARGET=100
+
+
+================================================================
+  16. PROXIMAS MELHORIAS PLANEJADAS
+================================================================
+
+  - [x] Debug completo do pipeline
+  - [x] Force entry mode
+  - [x] Reducao de restricoes
+  - [x] Metricas operacionais
+  - [ ] Calibracao de threshold baseada em shadow data
+  - [ ] Auto-descoberta de melhores horarios
+  - [ ] Notificacoes via Telegram
+  - [ ] Historico visual de trades
+  - [ ] Backtesting com dados historicos
+  - [ ] Ajuste automatico de valor baseado em winrate
+  - [ ] Dashboard web simples
+  - [ ] Export de relatorios em PDF
+
+
+================================================================
+  FIM DO DOCUMENTO
+  Atualizado em: 2026-05-09
+================================================================
